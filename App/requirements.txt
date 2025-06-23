@@ -1,91 +1,142 @@
-altair>=4.2.0
-attrs>=22.1.0
-blinker>=1.5
-blis>=0.7.9
-cachetools>=5.2.0
-catalogue>=2.0.8
-certifi>=2022.6.15
-cffi>=1.15.1
-chardet>=5.0.0
-charset-normalizer>=2.1.1
-click>=8.1.3
-colorama>=0.4.5
-commonmark>=0.9.1
-cryptography>=37.0.4
-cycler>=0.11.0
-cymem>=2.0.8
-decorator>=5.1.1
-docx2txt>=0.8
-entrypoints>=0.4
-fonttools>=4.37.2
-future>=0.18.2
+# =============================================================================
+# AI RESUME ANALYZER - STREAMLINED DEPENDENCIES
+# =============================================================================
+# Enhanced LLM+RAG ATS Resume System using PyMuPDF4LLM + EasyOCR + Ollama
+# 
+# INSTALLATION GUIDE:
+# 1. pip install -r requirements.txt
+# 2. Install Ollama: https://ollama.ai/download
+# 3. Pull model: ollama pull gemma2:27b
+# 4. Start service: ollama serve
+# =============================================================================
+
+# =============================================================================
+# CORE STREAMLIT APPLICATION DEPENDENCIES
+# =============================================================================
+
+# Streamlit web framework
+streamlit>=1.28.0
+
+# Data processing and visualization
+pandas>=1.5.0
+numpy>=1.24.0
+plotly>=5.15.0
+
+# Database connectivity  
+PyMySQL>=1.0.2
+
+# Geographic and location services
 geocoder>=1.38.1
 geographiclib>=1.52
 geopy>=2.2.0
-gitdb>=4.0.9
-GitPython>=3.1.27
-idna>=3.3
-importlib-metadata>=4.12.0
-Jinja2>=3.1.2
-joblib>=1.1.0
-jsonschema>=4.15.0
-kiwisolver>=1.4.4
-langcodes>=3.3.0
-MarkupSafe>=2.1.1
-matplotlib>=3.6.0
-murmurhash>=1.0.9
-nltk>=3.8
-numpy>=1.24.0
-packaging>=21.3
-pandas>=1.5.0
-pathy>=0.6.2
-pdfminer.six>=20221105
-Pillow>=9.3.0
-plac>=1.1.3
-plotly>=5.15.0
-preshed>=3.0.8
-protobuf>=3.20.1
-pyarrow>=9.0.0
-pycparser>=2.21
-pycryptodome>=3.15.0
-pydantic>=1.10.0
-pydeck>=0.8.0
-Pygments>=2.13.0
-Pympler>=1.0.1
-PyMySQL>=1.0.2
-pyparsing>=3.0.9
-pyresparser>=1.0.6
-pyrsistent>=0.18.1
+
+# System and utility libraries
 python-dateutil>=2.8.2
 pytz>=2022.2.1
-pytz-deprecation-shim>=0.1.0.post0
-ratelim>=0.1.6
-regex>=2022.8.17
+validators>=0.20.0
 requests>=2.28.1
-rich>=12.5.1
-semver>=2.13.0
-six>=1.16.0
-smart-open>=5.2.1
-smmap>=5.0.0
-sortedcontainers>=2.4.0
+urllib3>=1.26.12
+
+# Image processing and UI components
+Pillow>=9.3.0
+streamlit-tags>=1.2.8
+
+# Security and cryptography
+cryptography>=37.0.4
+pycryptodome>=3.15.0
+
+# =============================================================================
+# NATURAL LANGUAGE PROCESSING
+# =============================================================================
+
+# spaCy for NLP processing
 spacy>=3.4.4
 spacy-legacy>=3.0.12
 spacy-loggers>=1.0.4
-srsly>=1.0.5
-streamlit>=1.28.0
-streamlit-tags>=1.2.8
-tenacity>=8.0.1
-thinc>=8.1.0
+
+# NLTK for text processing
+nltk>=3.8
+
+# Traditional resume parsing
+pyresparser>=1.0.6
+
+# =============================================================================
+# STREAMLINED PDF PROCESSING (PyMuPDF4LLM + EasyOCR ONLY)
+# =============================================================================
+
+# PyMuPDF4LLM for structured markdown extraction (LLM-optimized)
+# This replaces basic PyMuPDF and provides better structured output
+pymupdf4llm>=0.0.25
+
+# EasyOCR for optical character recognition
+easyocr>=1.7.0
+
+# Computer Vision support for EasyOCR
+opencv-python>=4.8.0
+numpy>=1.24.3  # Specific version for EasyOCR compatibility
+
+# PDF to image conversion for EasyOCR fallback
+pdf2image>=1.16.0
+
+# =============================================================================
+# LLM AND RAG DEPENDENCIES FOR METADATA EXTRACTION
+# =============================================================================
+
+# LangChain framework and Ollama integration
+langchain>=0.1.10
+langchain-ollama>=0.1.0
+langchain-core>=0.1.25
+langchain-community>=0.0.20
+
+# Data validation and JSON schema
+pydantic>=2.6.1
+jsonschema>=4.21.1
+
+# Token counting and text processing
+tiktoken>=0.6.0
+typing-extensions>=4.9.0
+
+# =============================================================================
+# PYTORCH FOR GPU ACCELERATION (CRITICAL FOR RTX 5090)
+# =============================================================================
+
+# IMPORTANT INSTALLATION NOTES:
+# 
+# For RTX 5090 and latest NVIDIA GPUs (sm_120+ architecture):
+# The standard PyTorch does NOT support RTX 5090 due to newer CUDA capability.
+# You MUST install PyTorch nightly version for proper GPU support.
+#
+# INSTALLATION COMMANDS:
+# 1. Uninstall existing PyTorch:
+#    pip uninstall torch torchvision torchaudio -y
+#
+# 2. Install PyTorch nightly with CUDA 12.8 support:
+#    pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+#
+# GPU COMPATIBILITY MATRIX:
+# - RTX 5090: CUDA capability sm_120 ✅ (requires nightly build)
+# - RTX 4090: CUDA capability sm_89 ✅ (stable or nightly)  
+# - RTX 3090: CUDA capability sm_86 ✅ (stable or nightly)
+# - RTX 2080: CUDA capability sm_75 ✅ (stable or nightly)
+#
+# VERIFICATION:
+# python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
+#
+# PERFORMANCE EXPECTATIONS:
+# - EasyOCR with RTX 5090: ~3-10x faster than CPU
+# - Processing time: From 30-60s → 3-10s per page
+# - GPU Memory usage: ~2-4 GB for typical resume processing
+#
+# FALLBACK FOR CPU-ONLY SYSTEMS:
+# If you don't have a compatible GPU or prefer stability, uncomment these:
+# torch>=2.0.0
+# torchvision>=0.15.0  
+# torchaudio>=2.0.0
+
+
+# Additional utilities (included for compatibility)
+six>=1.16.0
 toml>=0.10.2
 toolz>=0.12.0
-tornado>=6.2
+tenacity>=8.0.1
 tqdm>=4.64.1
-typer>=0.7.0
-typing_extensions>=4.3.0
-tzdata>=2022.2
-tzlocal>=4.2
-urllib3>=1.26.12
-validators>=0.20.0
-wasabi>=0.10.1
-watchdog>=2.1.9
-zipp>=3.8.1

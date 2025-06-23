@@ -3,8 +3,46 @@ import multiprocessing as mp
 import io
 import spacy
 import pprint
+import re
 from spacy.matcher import Matcher
-from . import utils
+from pyresparser import utils
+from pdf_processing import pdf_processor
+
+
+# Custom extract_name function to handle spaCy compatibility issues
+def extract_name_custom(nlp_text, matcher):
+    """
+    Custom function to extract names from resume text, compatible with newer spaCy versions
+    """
+    pattern = [{'POS': 'PROPN'}, {'POS': 'PROPN'}]  # Simple pattern for proper nouns
+    
+    # Use the new spaCy Matcher.add API (without on_match as positional argument)
+    matcher.add("NAME", [pattern])
+    
+    doc = nlp_text if hasattr(nlp_text, 'ents') else nlp_text
+    matches = matcher(doc)
+    
+    for match_id, start, end in matches:
+        span = doc[start:end]
+        return span.text
+    
+    # Fallback: Extract from entities
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            return ent.text
+    
+    # Fallback: Simple regex pattern for names at the beginning
+    text = str(doc)
+    lines = text.split('\n')
+    for line in lines[:3]:  # Check first 3 lines
+        line = line.strip()
+        if line and len(line.split()) <= 4:  # Likely a name if 1-4 words
+            # Check if it looks like a name (starts with capital letters)
+            words = line.split()
+            if all(word[0].isupper() for word in words if word):
+                return line
+    
+    return None
 
 
 class ResumeParser(object):
@@ -16,7 +54,12 @@ class ResumeParser(object):
         custom_regex=None
     ):
         nlp = spacy.load('en_core_web_sm')
-        custom_nlp = spacy.load(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            custom_nlp = spacy.load(os.path.dirname(os.path.abspath(__file__)))
+        except (OSError, IOError) as e:
+            # Fallback to standard model if custom model fails to load
+            print(f"Warning: Custom spaCy model not found ({e}), using standard model")
+            custom_nlp = nlp
         self.__skills_file = skills_file
         self.__custom_regex = custom_regex
         self.__matcher = Matcher(nlp.vocab)
@@ -33,7 +76,17 @@ class ResumeParser(object):
             ext = os.path.splitext(self.__resume)[1].split('.')[1]
         else:
             ext = self.__resume.name.split('.')[1]
-        self.__text_raw = utils.extract_text(self.__resume, '.' + ext)
+        
+        # Use centralized PDF processor for text extraction
+        try:
+            if ext.lower() == 'pdf':
+                self.__text_raw = pdf_processor.extract_text_hybrid(self.__resume, development_mode=False)
+            else:
+                self.__text_raw = utils.extract_text(self.__resume, '.' + ext)
+        except Exception as e:
+            print(f"Text extraction failed, using fallback: {e}")
+            self.__text_raw = utils.extract_text(self.__resume, '.' + ext)
+        
         self.__text = ' '.join(self.__text_raw.split())
         self.__nlp = nlp(self.__text)
         self.__custom_nlp = custom_nlp(self.__text_raw)
@@ -47,7 +100,8 @@ class ResumeParser(object):
         cust_ent = utils.extract_entities_wih_custom_model(
                             self.__custom_nlp
                         )
-        name = utils.extract_name(self.__nlp, matcher=self.__matcher)
+        # Use our custom extract_name function instead of the problematic one
+        name = extract_name_custom(self.__nlp, self.__matcher)
         email = utils.extract_email(self.__text)
         mobile = utils.extract_mobile_number(self.__text, self.__custom_regex)
         skills = utils.extract_skills(
