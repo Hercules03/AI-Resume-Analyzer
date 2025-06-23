@@ -1,7 +1,7 @@
 # =============================================================================
 # AI RESUME ANALYZER - STREAMLINED DEPENDENCIES
 # =============================================================================
-# Enhanced LLM+RAG ATS Resume System using PyMuPDF4LLM + EasyOCR + Ollama
+# Enhanced LLM+RAG ATS Resume System using PyMuPDF4LLM + EasyOCR + Ollama + ChromaDB
 # 
 # INSTALLATION GUIDE:
 # 1. pip install -r requirements.txt
@@ -24,6 +24,11 @@ plotly>=5.15.0
 
 # Database connectivity  
 PyMySQL>=1.0.2
+
+# Vector Database and Embeddings
+chromadb>=0.4.18
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
 
 # Geographic and location services
 geocoder>=1.38.1
@@ -87,6 +92,7 @@ langchain>=0.1.10
 langchain-ollama>=0.1.0
 langchain-core>=0.1.25
 langchain-community>=0.0.20
+langgraph>=0.1.0
 
 # Data validation and JSON schema
 pydantic>=2.6.1

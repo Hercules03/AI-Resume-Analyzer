@@ -3,7 +3,17 @@ Configuration settings for AI Resume Analyzer
 """
 import os
 
-# Database Configuration
+# ChromaDB Configuration (replacing MySQL)
+CHROMA_CONFIG = {
+    'persist_directory': './chroma_db',
+    'collection_name_resumes': 'resume_data',
+    'collection_name_feedback': 'user_feedback',
+    'embedding_model': 'all-MiniLM-L6-v2',  # Lightweight embedding model
+    'chunk_size': 1000,
+    'chunk_overlap': 200
+}
+
+# Legacy MySQL Configuration (kept for reference/migration if needed)
 DB_CONFIG = {
     'host': 'localhost',
     'user': 'root', 
@@ -57,5 +67,6 @@ PAGE_CONFIG = {
     'layout': 'wide'
 }
 
-# Ensure upload directory exists
-os.makedirs(UPLOAD_CONFIG['upload_folder'], exist_ok=True) 
+# Ensure necessary directories exist
+os.makedirs(UPLOAD_CONFIG['upload_folder'], exist_ok=True)
+os.makedirs(CHROMA_CONFIG['persist_directory'], exist_ok=True) 

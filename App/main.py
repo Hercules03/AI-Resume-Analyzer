@@ -1,6 +1,6 @@
 """
 Main application entry point using the new specialized extractor architecture.
-AI Resume Analyzer - HR Edition | Made with Streamlit
+AI Resume Analyzer - HR Edition with ChromaDB Vector Database | Made with Streamlit
 """
 
 ###### Packages Used ######
@@ -47,7 +47,7 @@ def run():
     img = Image.open('./Logo/RESUM.png')
     st.image(img)
     st.sidebar.markdown("# Choose Module...")
-    activities = ["Candidate Evaluation", "Feedback", "About", "Admin"]
+    activities = ["Candidate Evaluation", "Find Candidates", "Feedback", "About", "Admin"]
     choice = st.sidebar.selectbox("Choose among the given options:", activities)
     
     # Model selection in sidebar
@@ -63,6 +63,20 @@ def run():
     # Update LLM service configuration if model changed
     if llm_model != llm_service.model_name:
         llm_service.update_model(llm_model)
+    
+    # Vector Database Statistics in sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Vector Database Status")
+    try:
+        db_stats = db_manager.get_database_stats()
+        if db_stats:
+            st.sidebar.metric("Resume Records", db_stats.get('total_resumes', 0))
+            st.sidebar.metric("Feedback Records", db_stats.get('total_feedback', 0))
+            st.sidebar.info(f"🔤 Embedding Model: {db_stats.get('embedding_model', 'Unknown')}")
+        else:
+            st.sidebar.warning("⚠️ Database stats unavailable")
+    except Exception:
+        st.sidebar.error("❌ Database connection issue")
     
     # Visitor counter
     st.sidebar.markdown('''
@@ -80,6 +94,10 @@ def run():
     if choice == 'Candidate Evaluation':
         handle_candidate_evaluation()
     
+    ###### CODE FOR FIND CANDIDATES ######
+    elif choice == 'Find Candidates':
+        handle_find_candidates()
+    
     ###### CODE FOR FEEDBACK SIDE ######
     elif choice == 'Feedback':
         handle_feedback()
@@ -93,107 +111,569 @@ def run():
         handle_admin()
 
 
-def handle_candidate_evaluation():
-    """Handle candidate evaluation using the new specialized extractor architecture."""
+def handle_find_candidates():
+    """Handle candidate search with three distinct methods"""
     
-    # Get system and location info
-    system_info = get_system_info()
-    location_info = get_location_info()
+    st.markdown('''<h4 style='text-align: left; color: #021659;'>🔍 Find Candidates</h4>''', unsafe_allow_html=True)
+    st.markdown("**AI-powered candidate discovery with multiple search approaches**")
     
-    # Generate security token
-    sec_token = generate_security_token()
+    # Check if there are any resumes in the database
+    user_count = db_manager.get_user_count()
+    if user_count == 0:
+        st.warning("📝 **No resume data available.** Please process some resumes first using the 'Candidate Evaluation' module.")
+        return
     
-    st.markdown('''<h5 style='text-align: left; color: #021659;'> Upload Candidate Resume for Evaluation</h5>''', unsafe_allow_html=True)
+    st.success(f"📊 **{user_count} resumes** available for search")
     
-    # Configuration options
-    col1, col2 = st.columns(2)
+    # Create three tabs for different search methods
+    tab1, tab2, tab3 = st.tabs(["🔧 Filter Method", "📋 Job Description Search", "💬 Find by Chat"])
+    
+    with tab1:
+        handle_filter_method()
+    
+    with tab2:
+        handle_job_description_search()
+    
+    with tab3:
+        handle_chat_search()
+
+
+def handle_filter_method():
+    """Handle filter-based candidate search"""
+    
+    st.markdown("### 🔧 **Filter Method**")
+    st.markdown("Use filters to narrow down candidates based on specific criteria")
+    
+    # Filter Options
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Development mode toggle
-        dev_mode = st.checkbox(
-            "🚀 **Development Mode** - Show detailed extraction process", 
-            help="Display detailed information about the extraction process including individual extractor results"
+        st.markdown("**🏢 Field & Experience**")
+        
+        field_filter = st.selectbox(
+            "Field",
+            ['All Fields', 'Data Science & Analytics', 'Web Development', 'Backend Development', 
+             'Mobile Development', 'DevOps & Cloud', 'Machine Learning', 'General'],
+            key="filter_field"
         )
-        if dev_mode:
-            st.info("💡 **Development Mode Enabled:** You'll see detailed information about each specialized extractor.")
+        
+        level_filter = st.selectbox(
+            "Experience Level",
+            ['All Levels', 'Entry Level', 'Junior', 'Mid Level', 'Senior', 'Lead/Expert'],
+            key="filter_level"
+        )
+        
+        score_range = st.slider(
+            "Resume Score Range",
+            0, 100, (60, 100), 5,
+            key="filter_score"
+        )
     
     with col2:
-        # LLM extraction toggle
-        enable_llm_extraction = st.checkbox(
-            "🤖 **LLM-Powered Extraction** - Use AI for structured data extraction", 
-            value=True, 
-            help="Use specialized extractors with AI for better accuracy"
-        )
-        if enable_llm_extraction:
-            st.info("🔄 **Sequential processing enabled:** Extractors run one at a time (optimized for local Ollama)")
-    
-    # Show extraction capabilities
-    if dev_mode:
-        st.subheader("🔧 **Extraction Capabilities**")
-        capabilities = resume_processor.get_extraction_capabilities()
-        for capability, description in capabilities.items():
-            st.write(f"• **{capability}**: {description}")
-    
-    ## File upload in PDF format
-    pdf_file = st.file_uploader("Choose your Resume", type=["pdf"])
-    
-    if pdf_file is not None:
-        # Validate file
-        if not validate_file_upload(pdf_file):
-            return
+        st.markdown("**📍 Location**")
         
-        with st.spinner('🔄 Processing resume with specialized extractors...'):
-            time.sleep(2)
-        
-        ### Save the uploaded resume
-        save_image_path = './Uploaded_Resumes/' + pdf_file.name
-        pdf_name = pdf_file.name
-        
-        with open(save_image_path, "wb") as f:
-            f.write(pdf_file.getbuffer())
-        
-        # Display PDF
-        show_pdf(save_image_path)
-        
-        if enable_llm_extraction and llm_service.is_available():
-            # Use new specialized extractors
-            st.markdown("---")
-            st.header("**🤖 AI-Powered Resume Analysis with Specialized Extractors**")
-            
-            try:
-                # Process resume using the new architecture
-                resume = resume_processor.process_resume(save_image_path, dev_mode)
-                
-                if resume and resume.name != "Unknown":
-                    st.success("✅ **Resume processed successfully using specialized extractors!**")
-                    
-                    # Display results in a structured way
-                    display_resume_results(resume, dev_mode)
-                    
-                    # Prepare data for database
-                    user_data = prepare_user_data_from_resume(
-                        resume, system_info, location_info, sec_token, pdf_name
-                    )
-                    
-                    # Insert into database
-                    db_manager.insert_user_data(user_data)
-                    
-                    # Show success
-                    st.balloons()
-                    
-                else:
-                    st.warning("⚠️ Resume processing completed with limited data extraction.")
-                    
-            except Exception as e:
-                st.error(f"❌ Resume processing failed: {str(e)}")
-                if dev_mode:
-                    st.exception(e)
-        
-        else:
-            if not enable_llm_extraction:
-                st.info("💡 **Enable LLM-powered extraction for AI analysis.**")
+        # Get unique locations from database for filter options
+        try:
+            user_data = db_manager.get_user_data()
+            if user_data is not None and not user_data.empty:
+                cities = ['All Cities'] + sorted(user_data.iloc[:, -7].dropna().unique().tolist())  # City column
+                states = ['All States'] + sorted(user_data.iloc[:, -6].dropna().unique().tolist())  # State column
             else:
-                st.error("❌ **LLM service not available.** Please check your Ollama configuration.")
+                cities = ['All Cities']
+                states = ['All States']
+        except:
+            cities = ['All Cities']
+            states = ['All States']
+        
+        city_filter = st.selectbox("City", cities, key="filter_city")
+        state_filter = st.selectbox("State", states, key="filter_state")
+    
+    with col3:
+        st.markdown("**🛠️ Skills**")
+        
+        required_skills = st_tags(
+            label="Required Skills",
+            text="Press enter to add skills",
+            value=[],
+            suggestions=['Python', 'JavaScript', 'React', 'Machine Learning', 'Data Science', 
+                        'Java', 'SQL', 'AWS', 'Docker', 'Node.js', 'Angular', 'Vue.js',
+                        'TensorFlow', 'PyTorch', 'Kubernetes', 'MongoDB', 'PostgreSQL'],
+            maxtags=10,
+            key="filter_skills"
+        )
+        
+        num_results = st.selectbox("Max Results", [10, 20, 50, 100], index=1, key="filter_results")
+    
+    # Apply Filters
+    if st.button("🔍 Apply Filters", type="primary"):
+        with st.spinner('🔍 Filtering candidates...'):
+            filtered_candidates = apply_candidate_filters(
+                field_filter, level_filter, score_range, 
+                city_filter, state_filter, required_skills, num_results
+            )
+        
+        if filtered_candidates:
+            st.markdown(f"### 🎯 **Found {len(filtered_candidates)} candidates matching your filters**")
+            display_filtered_candidates(filtered_candidates)
+        else:
+            st.warning("🔍 **No candidates found matching your filters.** Try broadening your criteria.")
+
+
+def handle_job_description_search():
+    """Handle job description based semantic search"""
+    
+    st.markdown("### 📋 **Job Description Search**")
+    st.markdown("Paste a complete job description to find the best matching candidates")
+    
+    # Job Description Input
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        job_description = st.text_area(
+            "📋 **Job Description:**",
+            placeholder="""Example:
+Senior Python Developer - Remote
+
+We are looking for an experienced Python developer to join our team:
+
+Requirements:
+• 5+ years of Python development experience
+• Strong experience with Django or Flask frameworks
+• Machine learning and data analysis experience preferred
+• AWS cloud deployment experience
+• Experience with RESTful APIs and microservices
+• Strong problem-solving and communication skills
+• Bachelor's degree in Computer Science or related field
+
+Responsibilities:
+• Develop and maintain Python applications
+• Collaborate with data science team on ML projects
+• Deploy applications to AWS cloud infrastructure
+• Code review and mentoring junior developers""",
+            height=300,
+            key="jd_text"
+        )
+    
+    with col2:
+        st.markdown("**Search Options:**")
+        num_results = st.selectbox("Max Results", [5, 10, 15, 20], index=2, key="jd_results")
+        match_threshold = st.slider("Match Threshold %", 30, 90, 60, 5, key="jd_threshold")
+        
+        st.markdown("**Quick Templates:**")
+        templates = {
+            "📱 Mobile Dev": """Mobile Application Developer
+• 3+ years mobile development experience
+• iOS (Swift) and Android (Kotlin/Java)
+• React Native or Flutter preferred
+• App Store/Play Store publishing
+• UI/UX collaboration experience""",
+            
+            "🤖 ML Engineer": """Machine Learning Engineer
+• 4+ years ML/AI development experience
+• Python, TensorFlow, PyTorch
+• Data preprocessing and feature engineering
+• Model deployment and MLOps experience
+• Statistical analysis and research skills""",
+            
+            "🌐 Full Stack": """Full Stack Developer
+• 5+ years full-stack development
+• Frontend: React, Vue.js, or Angular
+• Backend: Node.js, Python, or Java
+• Database design and optimization
+• RESTful API development"""
+        }
+        
+        for template_name, template_content in templates.items():
+            if st.button(template_name, key=f"template_{template_name}"):
+                st.session_state.jd_template = template_content
+    
+    # Use template if selected
+    if 'jd_template' in st.session_state:
+        job_description = st.text_area(
+            "📋 **Job Description:** (Template Applied)",
+            value=st.session_state.jd_template,
+            height=200,
+            key="jd_with_template"
+        )
+        del st.session_state.jd_template
+    
+    # JD Analysis and Search
+    if job_description and len(job_description.strip()) > 50:
+        
+        # Extract key requirements from JD
+        with st.expander("🔍 **Job Description Analysis**"):
+            with st.spinner('🤖 Analyzing job description...'):
+                jd_analysis = analyze_job_description(job_description)
+            
+            if jd_analysis:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**🛠️ Required Skills:**")
+                    for skill in jd_analysis.get('required_skills', []):
+                        st.write(f"• {skill}")
+                
+                with col2:
+                    st.markdown("**📋 Key Requirements:**")
+                    for req in jd_analysis.get('key_requirements', []):
+                        st.write(f"• {req}")
+                
+                if jd_analysis.get('experience_level'):
+                    st.markdown(f"**📈 Experience Level:** {jd_analysis['experience_level']}")
+                
+                if jd_analysis.get('field'):
+                    st.markdown(f"**🏢 Field:** {jd_analysis['field']}")
+        
+        # Perform semantic search
+        if st.button("🔍 Find Matching Candidates", type="primary", key="jd_search_btn"):
+            with st.spinner('🔍 Finding candidates that match the job description...'):
+                search_results = db_manager.semantic_search_resumes(job_description, num_results)
+                
+                # Filter by threshold
+                filtered_results = [
+                    result for result in search_results 
+                    if result['similarity_score'] * 100 >= match_threshold
+                ]
+            
+            if filtered_results:
+                st.markdown(f"### 🎯 **Found {len(filtered_results)} candidates matching the job description**")
+                st.markdown(f"*Showing candidates with {match_threshold}%+ similarity*")
+                
+                display_search_results(filtered_results, "Job Description Match")
+            else:
+                st.warning(f"🔍 **No candidates found with {match_threshold}%+ match.** Try lowering the threshold or refining the JD.")
+
+
+def handle_chat_search():
+    """Handle conversational chat-based candidate search using RAG"""
+    
+    from chatbot_service import candidate_chatbot
+    
+    st.markdown("### 💬 **Find by Chat**")
+    st.markdown("Chat with our AI assistant to find candidates using natural language")
+    
+    # Check if chatbot is available
+    if not candidate_chatbot.is_available():
+        st.error("❌ **Chatbot service is not available.** Please check your LLM configuration.")
+        st.info("""
+        **Troubleshooting:**
+        1. Make sure Ollama is running: `ollama serve`
+        2. Verify the model is available: `ollama list`
+        3. Check the model configuration in settings
+        """)
+        return
+    
+    # Initialize chat history in session state
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Chat interface
+    col1, col2 = st.columns([3, 1])
+    
+    with col2:
+        st.markdown("**💡 Example Queries:**")
+        example_queries = [
+            "Find me Python developers with ML experience",
+            "I need a senior frontend engineer",
+            "Show me data scientists in California", 
+            "Find full-stack developers with React",
+            "I'm looking for DevOps engineers with AWS",
+            "Find mobile developers with Flutter experience"
+        ]
+        
+        for query in example_queries:
+            if st.button(f"💬 {query}", key=f"example_{hash(query)}", use_container_width=True):
+                st.session_state.example_query = query
+        
+        # Clear chat button
+        if st.button("🗑️ Clear Chat", key="clear_chat"):
+            st.session_state.chat_history = []
+            candidate_chatbot.clear_history()
+            st.rerun()
+    
+    with col1:
+        # Display chat history
+        chat_container = st.container()
+        
+        with chat_container:
+            if st.session_state.chat_history:
+                for i, message in enumerate(st.session_state.chat_history):
+                    # User message
+                    with st.chat_message("user"):
+                        st.write(message["user"])
+                    
+                    # Assistant message  
+                    with st.chat_message("assistant"):
+                        st.write(message["assistant"])
+            else:
+                st.info("👋 **Hello! I'm your AI HR assistant.** Ask me to find candidates based on skills, experience, location, or any requirements you have in mind!")
+        
+        # Chat input
+        user_input = st.chat_input("Ask me to find candidates... (e.g., 'Find me Python developers with 3+ years experience')")
+        
+        # Handle example query
+        if 'example_query' in st.session_state:
+            user_input = st.session_state.example_query
+            del st.session_state.example_query
+        
+        # Process user input
+        if user_input:
+            # Add user message to history
+            with st.chat_message("user"):
+                st.write(user_input)
+            
+            # Get chatbot response
+            with st.chat_message("assistant"):
+                with st.spinner("🤖 Searching candidates..."):
+                    response = candidate_chatbot.chat(user_input)
+                st.write(response)
+            
+            # Update session state
+            st.session_state.chat_history.append({
+                "user": user_input,
+                "assistant": response
+            })
+            
+            st.rerun()
+
+
+def apply_candidate_filters(field_filter, level_filter, score_range, city_filter, state_filter, required_skills, num_results):
+    """Apply filters to candidate database and return matching candidates"""
+    
+    try:
+        # Get all user data
+        user_data = db_manager.get_user_data()
+        if user_data is None or user_data.empty:
+            return []
+        
+        # Apply filters
+        filtered_data = user_data.copy()
+        
+        # Field filter
+        if field_filter != 'All Fields':
+            filtered_data = filtered_data[filtered_data.iloc[:, 6] == field_filter]  # Candidate Field column
+        
+        # Level filter  
+        if level_filter != 'All Levels':
+            filtered_data = filtered_data[filtered_data.iloc[:, 13] == level_filter]  # Experience Level column
+        
+        # Score filter
+        score_col = pd.to_numeric(filtered_data.iloc[:, 10], errors='coerce')  # Resume Score column
+        filtered_data = filtered_data[(score_col >= score_range[0]) & (score_col <= score_range[1])]
+        
+        # Location filters
+        if city_filter != 'All Cities':
+            filtered_data = filtered_data[filtered_data.iloc[:, -7] == city_filter]  # City column
+        
+        if state_filter != 'All States':
+            filtered_data = filtered_data[filtered_data.iloc[:, -6] == state_filter]  # State column
+        
+        # Skills filter
+        if required_skills:
+            skills_mask = filtered_data.iloc[:, 14].str.contains('|'.join(required_skills), case=False, na=False)  # Skills column
+            filtered_data = filtered_data[skills_mask]
+        
+        # Limit results
+        filtered_data = filtered_data.head(num_results)
+        
+        # Convert to list of dictionaries for display
+        results = []
+        for _, row in filtered_data.iterrows():
+            results.append({
+                'name': row.iloc[8],  # Candidate Name
+                'email': row.iloc[9],  # Candidate Email  
+                'field': row.iloc[6],  # Candidate Field
+                'level': row.iloc[13],  # Experience Level
+                'score': row.iloc[10],  # Resume Score
+                'skills': row.iloc[14],  # Skills
+                'city': row.iloc[-7],  # City
+                'state': row.iloc[-6],  # State
+                'file': row.iloc[12]  # Resume File
+            })
+        
+        return results
+        
+    except Exception as e:
+        st.error(f"Filter application failed: {e}")
+        return []
+
+
+def display_filtered_candidates(candidates):
+    """Display filtered candidates in a structured format"""
+    
+    # Create summary
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        fields = [c['field'] for c in candidates if c.get('field')]
+        if fields:
+            st.metric("Top Field", max(set(fields), key=fields.count))
+    
+    with col2:
+        scores = [int(c['score']) for c in candidates if c.get('score') and str(c['score']).isdigit()]
+        if scores:
+            st.metric("Avg Resume Score", f"{sum(scores)/len(scores):.1f}%")
+    
+    with col3:
+        levels = [c['level'] for c in candidates if c.get('level')]
+        if levels:
+            st.metric("Top Level", max(set(levels), key=levels.count))
+    
+    # Display candidates
+    for i, candidate in enumerate(candidates, 1):
+        with st.expander(f"**{i}. {candidate.get('name', 'Unknown')}** - {candidate.get('field', 'General')}"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.write(f"**📧 Email:** {candidate.get('email', 'Not provided')}")
+                st.write(f"**📈 Level:** {candidate.get('level', 'Unknown')}")
+                st.write(f"**📊 Resume Score:** {candidate.get('score', '0')}%")
+            
+            with col2:
+                st.write(f"**📍 Location:** {candidate.get('city', '')}, {candidate.get('state', '')}")
+                st.write(f"**📄 File:** {candidate.get('file', 'Unknown')}")
+            
+            with col3:
+                if candidate.get('skills'):
+                    skills_list = str(candidate['skills']).split(',')[:5]  # Show top 5 skills
+                    st.write(f"**🛠️ Top Skills:** {', '.join(skills_list)}")
+    
+    # Export option
+    st.markdown("---")
+    export_data = pd.DataFrame(candidates)
+    csv = export_data.to_csv(index=False)
+    
+    st.download_button(
+        label="📥 Download Filtered Results CSV",
+        data=csv,
+        file_name="filtered_candidates.csv",
+        mime="text/csv"
+    )
+
+
+def analyze_job_description(job_description):
+    """Analyze job description to extract key requirements using LLM"""
+    
+    if not llm_service.is_available():
+        return None
+    
+    try:
+        analysis_prompt = f"""
+        Analyze this job description and extract key information:
+
+        Job Description:
+        {job_description}
+
+        Please extract:
+        1. Required technical skills (programming languages, frameworks, tools)
+        2. Key requirements (experience level, education, certifications)
+        3. Experience level (Entry/Junior/Mid/Senior/Lead)
+        4. Field/Domain (Web Development, Data Science, Mobile, etc.)
+
+        Format as JSON:
+        {{
+            "required_skills": ["skill1", "skill2", ...],
+            "key_requirements": ["requirement1", "requirement2", ...],
+            "experience_level": "level",
+            "field": "field_name"
+        }}
+        """
+        
+        response = llm_service.extract_simple(analysis_prompt)
+        
+        # Try to parse JSON response
+        import json
+        try:
+            return json.loads(response)
+        except:
+            # If JSON parsing fails, create a simple analysis
+            return {
+                "required_skills": ["Analysis not available"],
+                "key_requirements": ["Please check job description"],
+                "experience_level": "Not determined",
+                "field": "General"
+            }
+    
+    except Exception as e:
+        st.error(f"Job description analysis failed: {str(e)}")
+        return None
+
+
+def display_search_results(search_results, search_type):
+    """Display search results in a consistent format"""
+    
+    if search_results:
+        st.markdown(f"### 🎯 **Found {len(search_results)} relevant candidates**")
+        
+        # Display search results
+        for i, result in enumerate(search_results, 1):
+            metadata = result['metadata']
+            similarity = round(result['similarity_score'] * 100, 1)
+            
+            # Color-code similarity scores
+            if similarity >= 80:
+                similarity_color = "🟢"
+            elif similarity >= 60:
+                similarity_color = "🟡"
+            else:
+                similarity_color = "🔴"
+            
+            with st.expander(f"**{i}. {metadata.get('name', 'Unknown')}** - {similarity_color} {similarity}% match"):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    st.write(f"**📧 Email:** {metadata.get('email', 'Not provided')}")
+                    st.write(f"**🏢 Field:** {metadata.get('reco_field', 'General')}")
+                    st.write(f"**📈 Level:** {metadata.get('cand_level', 'Unknown')}")
+                
+                with col2:
+                    st.write(f"**📍 Location:** {metadata.get('city', '')}, {metadata.get('state', '')}")
+                    st.write(f"**📊 Resume Score:** {metadata.get('resume_score', '0')}%")
+                    st.write(f"**📄 File:** {metadata.get('pdf_name', 'Unknown')}")
+                
+                with col3:
+                    st.metric("Similarity", f"{similarity}%")
+                
+                # Show extracted content snippet
+                if result.get('document'):
+                    st.markdown("**📝 Resume Content:**")
+                    st.info(result['document'][:300] + "..." if len(result['document']) > 300 else result['document'])
+        
+        # Export functionality
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Create downloadable CSV
+            export_data = []
+            for result in search_results:
+                metadata = result['metadata']
+                export_data.append({
+                    'Name': metadata.get('name', 'Unknown'),
+                    'Email': metadata.get('email', 'Not provided'),
+                    'Field': metadata.get('reco_field', 'General'),
+                    'Level': metadata.get('cand_level', 'Unknown'),
+                    'Resume Score': metadata.get('resume_score', '0'),
+                    'Similarity %': round(result['similarity_score'] * 100, 1),
+                    'Location': f"{metadata.get('city', '')}, {metadata.get('state', '')}",
+                    'File': metadata.get('pdf_name', 'Unknown')
+                })
+            
+            export_df = pd.DataFrame(export_data)
+            csv = export_df.to_csv(index=False)
+            
+            st.download_button(
+                label="📥 Download Search Results CSV",
+                data=csv,
+                file_name=f"candidate_search_results_{search_type.replace(' ', '_').lower()}.csv",
+                mime="text/csv"
+            )
+        
+        with col2:
+            st.info(f"**Search Type:** {search_type}\n**Total Results:** {len(search_results)}")
+    
+    else:
+        st.warning("🔍 **No candidates found.** Try refining your search query or using different keywords.")
 
 
 def format_profile_link(url: str, platform: str) -> str:
@@ -622,94 +1102,6 @@ def handle_feedback():
         st.dataframe(dff, width=1000)
 
 
-def handle_about():
-    """Handle about page with system information."""
-    
-    st.subheader("**About The Tool - AI RESUME ANALYZER (HR Edition)**")
-
-    st.markdown('''
-    <p align='justify'>
-        An advanced AI-powered HR tool that analyzes candidate resumes using specialized extractors and concurrent processing. 
-        The system employs a modular architecture with dedicated extractors for different resume sections, enabling 
-        comprehensive evaluation and analysis for HR professionals.
-    </p>
-
-    <p align="justify">
-        <b>How to use it: -</b> <br/><br/>
-        <b>Candidate Evaluation -</b> <br/>
-        Upload candidate resumes in PDF format for comprehensive AI-powered analysis. The system uses specialized 
-        extractors that work concurrently to extract and analyze different aspects of the resume.<br/><br/>
-        
-        <b>New Features:</b><br/>
-        • <b>Specialized Extractors:</b> Profile, Skills, Education, Experience, and YoE extractors<br/>
-        • <b>Concurrent Processing:</b> All extractors run in parallel for faster analysis<br/>
-        • <b>Structured Data Models:</b> Pydantic models ensure data quality and consistency<br/>
-        • <b>Enhanced Error Handling:</b> Robust processing with intelligent fallbacks<br/>
-        • <b>Development Mode:</b> Detailed insights into the extraction process<br/>
-        • <b>Resume Scoring:</b> Intelligent completeness scoring algorithm<br/><br/>
-        
-        <b>Admin -</b> <br/>
-        For login use <b>admin</b> as username and <b>@dmin1234</b> as password.<br/>
-        Access candidate data, analytics, and system management features.
-    </p><br/><br/>
-
-    <p align="justify">
-        Enhanced with cutting-edge AI architecture designed specifically for modern HR workflows and recruiting teams.
-    </p>
-    ''', unsafe_allow_html=True)
-
-
-def handle_admin():
-    """Handle admin panel with analytics and data management."""
-    
-    st.success('Welcome to Admin Side')
-
-    # Admin Login
-    ad_user = st.text_input("Username")
-    ad_password = st.text_input("Password", type='password')
-
-    if st.button('Login'):
-        
-        if ad_user == ADMIN_CONFIG['username'] and ad_password == ADMIN_CONFIG['password']:
-            
-            # Get analytics data
-            plot_data = db_manager.get_analytics_data()
-            
-            # Total Candidates Count
-            user_count = db_manager.get_user_count()
-            st.success("Welcome HR Admin! Total %d " % user_count + " Candidates Have Been Evaluated 📊")                
-            
-            # Get user data
-            df = db_manager.get_user_data()
-            if df is not None:
-                # Rename columns for better display
-                df.columns = ['ID', 'Token', 'IP Address', 'HR User', 'HR Email', 'HR Contact', 'Candidate Field', 'Evaluation Date',
-                              'Candidate Name', 'Candidate Email', 'Resume Score', 'Pages',  'Resume File',   
-                              'Experience Level', 'Skills', 'Analysis Notes', 'Evaluation Summary',
-                              'City', 'State', 'Country', 'Location', 'System OS', 'System', 'System User']
-
-                st.header("**Candidate Evaluation Data**")
-                st.dataframe(df)
-                
-                # Download Report
-                st.markdown(get_csv_download_link(df,'Candidate_Evaluation_Report.csv','📊 Download Candidate Report'), unsafe_allow_html=True)
-
-            # Get feedback data
-            feedback_df = db_manager.get_feedback_data()
-            if feedback_df is not None:
-                st.header("**HR System Feedback Data**")
-                st.dataframe(feedback_df)
-                plotfeed_data = feedback_df
-            else:
-                plotfeed_data = None                        
-
-            # Display analytics charts
-            display_admin_charts(plot_data, plotfeed_data, df)
-
-        else:
-            st.error("Wrong ID & Password Provided")
-
-
 def display_admin_charts(plot_data, plotfeed_data, df):
     """Display admin analytics charts."""
     
@@ -755,6 +1147,238 @@ def display_admin_charts(plot_data, plotfeed_data, df):
             st.subheader("**Pie-Chart for Candidate Geographic Distribution - City**")
             fig = px.pie(df, values=values, names=labels, title='Candidate Pool Distribution by City 🌆', color_discrete_sequence=px.colors.sequential.Jet)
             st.plotly_chart(fig)
+
+
+def handle_candidate_evaluation():
+    """Handle candidate evaluation using the new specialized extractor architecture."""
+    
+    # Get system and location info
+    system_info = get_system_info()
+    location_info = get_location_info()
+    
+    # Generate security token
+    sec_token = generate_security_token()
+    
+    st.markdown('''<h5 style='text-align: left; color: #021659;'> Upload Candidate Resume for Evaluation</h5>''', unsafe_allow_html=True)
+    
+    # Configuration options
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Development mode toggle
+        dev_mode = st.checkbox(
+            "🚀 **Development Mode** - Show detailed extraction process", 
+            help="Display detailed information about the extraction process including individual extractor results"
+        )
+        if dev_mode:
+            st.info("💡 **Development Mode Enabled:** You'll see detailed information about each specialized extractor.")
+    
+    with col2:
+        # LLM extraction toggle
+        enable_llm_extraction = st.checkbox(
+            "🤖 **LLM-Powered Extraction** - Use AI for structured data extraction", 
+            value=True, 
+            help="Use specialized extractors with AI for better accuracy"
+        )
+        if enable_llm_extraction:
+            st.info("🔄 **Sequential processing enabled:** Extractors run one at a time (optimized for local Ollama)")
+    
+    # Show extraction capabilities
+    if dev_mode:
+        st.subheader("🔧 **Extraction Capabilities**")
+        capabilities = resume_processor.get_extraction_capabilities()
+        for capability, description in capabilities.items():
+            st.write(f"• **{capability}**: {description}")
+    
+    ## File upload in PDF format
+    pdf_file = st.file_uploader("Choose your Resume", type=["pdf"])
+    
+    if pdf_file is not None:
+        # Validate file
+        if not validate_file_upload(pdf_file):
+            return
+        
+        with st.spinner('🔄 Processing resume with specialized extractors...'):
+            time.sleep(2)
+        
+        ### Save the uploaded resume
+        save_image_path = './Uploaded_Resumes/' + pdf_file.name
+        pdf_name = pdf_file.name
+        
+        with open(save_image_path, "wb") as f:
+            f.write(pdf_file.getbuffer())
+        
+        # Display PDF
+        show_pdf(save_image_path)
+        
+        if enable_llm_extraction and llm_service.is_available():
+            # Use new specialized extractors
+            st.markdown("---")
+            st.header("**🤖 AI-Powered Resume Analysis with Vector Database Storage**")
+            
+            try:
+                # Process resume using the new architecture
+                resume = resume_processor.process_resume(save_image_path, dev_mode)
+                
+                if resume and resume.name != "Unknown":
+                    st.success("✅ **Resume processed successfully using specialized extractors!**")
+                    
+                    # Display results in a structured way
+                    display_resume_results(resume, dev_mode)
+                    
+                    # Prepare data for database
+                    user_data = prepare_user_data_from_resume(
+                        resume, system_info, location_info, sec_token, pdf_name
+                    )
+                    
+                    # Insert into ChromaDB vector database
+                    insertion_success = db_manager.insert_user_data(user_data)
+                    
+                    if insertion_success:
+                        st.success("🗄️ **Resume data stored in vector database for semantic search!**")
+                        
+                        # Show quick search example
+                        st.markdown("---")
+                        st.info("💡 **Tip:** Use the 'Find Candidates' module to find similar candidates using natural language queries!")
+                        
+                    # Show success
+                    st.balloons()
+                    
+                else:
+                    st.warning("⚠️ Resume processing completed with limited data extraction.")
+                    
+            except Exception as e:
+                st.error(f"❌ Resume processing failed: {str(e)}")
+                if dev_mode:
+                    st.exception(e)
+        
+        else:
+            if not enable_llm_extraction:
+                st.info("💡 **Enable LLM-powered extraction for AI analysis.**")
+            else:
+                st.error("❌ **LLM service not available.** Please check your Ollama configuration.")
+
+
+def handle_about():
+    """Handle about page with enhanced vector database information."""
+    
+    st.subheader("**About The Tool - AI RESUME ANALYZER (HR Edition with Vector Database)**")
+
+    st.markdown('''
+    <p align='justify'>
+        An advanced AI-powered HR tool that analyzes candidate resumes using specialized extractors, LLM processing, 
+        and ChromaDB vector database for semantic search capabilities. The system employs a modular architecture 
+        with dedicated extractors and intelligent vector storage for comprehensive evaluation and analysis.
+    </p>
+
+    <p align="justify">
+        <b>How to use it: -</b> <br/><br/>
+        <b>Candidate Evaluation -</b> <br/>
+        Upload candidate resumes in PDF format for comprehensive AI-powered analysis. The system uses specialized 
+        extractors that work sequentially to extract and analyze different aspects of the resume, then stores 
+        the data in a vector database for semantic retrieval.<br/><br/>
+        
+        <b>Find Candidates (NEW) -</b> <br/>
+        Use natural language queries to search through processed resumes using semantic similarity. Find candidates 
+        based on skills, experience, location, or any combination of criteria using AI-powered embeddings.<br/><br/>
+        
+        <b>Enhanced Features:</b><br/>
+        • <b>ChromaDB Integration:</b> Vector database for semantic search and similarity matching<br/>
+        • <b>Embedding Models:</b> Sentence transformers for high-quality text embeddings<br/>
+        • <b>Semantic Search:</b> Natural language queries for candidate discovery<br/>
+        • <b>Similar Candidate Matching:</b> Find candidates with similar skill profiles<br/>
+        • <b>Specialized Extractors:</b> Profile, Skills, Education, Experience, and YoE extractors<br/>
+        • <b>LLM Processing:</b> Advanced AI analysis with structured data models<br/>
+        • <b>Development Mode:</b> Detailed insights into the extraction and storage process<br/><br/>
+        
+        <b>Admin Dashboard -</b> <br/>
+        Direct access to candidate data, analytics, vector database statistics, and system management features.
+        No login required - instant access to all administrative tools and visualizations.
+    </p><br/><br/>
+
+    <p align="justify">
+        Enhanced with cutting-edge vector database technology and semantic search capabilities designed 
+        specifically for modern HR workflows and AI-powered recruiting teams.
+    </p>
+    ''', unsafe_allow_html=True)
+
+
+def handle_admin():
+    """Handle admin panel with enhanced vector database analytics - Direct Access"""
+    
+    st.header('🔧 **Admin Dashboard - Vector Database Edition**')
+    st.markdown("**Direct access to database management and analytics**")
+    
+    # Vector Database Statistics
+    st.markdown("---")
+    st.header("🗄️ **Vector Database Statistics**")
+    
+    db_stats = db_manager.get_database_stats()
+    if db_stats:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Resume Records", db_stats.get('total_resumes', 0))
+        
+        with col2:
+            st.metric("Feedback Records", db_stats.get('total_feedback', 0))
+        
+        with col3:
+            st.metric("Collections", db_stats.get('collections', 0))
+        
+        with col4:
+            st.info(f"**Embedding Model:**\n{db_stats.get('embedding_model', 'Unknown')}")
+    
+    # Get analytics data
+    plot_data = db_manager.get_analytics_data()
+    
+    # Total Candidates Count
+    user_count = db_manager.get_user_count()
+    st.success("Welcome to Admin Dashboard! Total %d " % user_count + " Candidates Have Been Evaluated 📊")                
+    
+    # Get user data
+    df = db_manager.get_user_data()
+    if df is not None and not df.empty:
+        # Rename columns for better display
+        df.columns = ['ID', 'Token', 'IP Address', 'HR User', 'HR Email', 'HR Contact', 'Candidate Field', 'Evaluation Date',
+                      'Candidate Name', 'Candidate Email', 'Resume Score', 'Pages',  'Resume File',   
+                      'Experience Level', 'Skills', 'Analysis Notes', 'Evaluation Summary',
+                      'City', 'State', 'Country', 'Location', 'System OS', 'System', 'System User']
+
+        st.header("**📊 Candidate Evaluation Data (Vector Database)**")
+        st.dataframe(df)
+        
+        # Download Report
+        st.markdown(get_csv_download_link(df,'Candidate_Evaluation_Report.csv','📊 Download Candidate Report'), unsafe_allow_html=True)
+
+    # Vector Database Management
+    st.markdown("---")
+    st.header("🔧 **Vector Database Management**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Reset Vector Database", help="⚠️ This will delete all data!"):
+            if st.checkbox("I understand this will delete all data"):
+                db_manager.reset_database()
+                st.success("✅ Vector database has been reset!")
+    
+    with col2:
+        st.info("**Vector Database Features:**\n- Semantic search capabilities\n- Embedding-based similarity\n- LLM-optimized storage")
+
+    # Get feedback data
+    feedback_df = db_manager.get_feedback_data()
+    if feedback_df is not None and not feedback_df.empty:
+        st.header("**📝 HR System Feedback Data**")
+        st.dataframe(feedback_df)
+        plotfeed_data = feedback_df
+    else:
+        plotfeed_data = pd.DataFrame()                        
+
+    # Display analytics charts
+    st.markdown("---")
+    st.header("📈 **Analytics & Visualizations**")
+    display_admin_charts(plot_data, plotfeed_data, df)
 
 
 if __name__ == "__main__":
