@@ -25,6 +25,7 @@ class LLMService:
         self.model_name = model_name or LLM_CONFIG['default_model']
         self.base_url = base_url or LLM_CONFIG['default_url']
         self.llm = None
+        self.connection_tested = False
         self._initialize_llm()
     
     def _initialize_llm(self):
@@ -43,14 +44,8 @@ class LLMService:
                 top_p=LLM_CONFIG['top_p']
             )
             
-            # Test connection
-            test_response = self.llm.invoke("Test connection")
-            if test_response:
-                st.success(f"✅ LLM Connection established: {self.model_name}")
-                return True
-            else:
-                st.error("❌ LLM connection test failed")
-                return False
+            # Don't test connection immediately - do it lazily when first used
+            return True
                 
         except Exception as e:
             st.error(f"❌ Failed to initialize LLM: {str(e)}")
@@ -60,6 +55,33 @@ class LLMService:
             2. Pull the model: `ollama pull gemma2:27b`
             3. Check if the model name is correct
             4. Verify Ollama is accessible at the configured URL
+            """)
+            return False
+    
+    def _test_connection(self):
+        """Test LLM connection if not already tested."""
+        if self.connection_tested or not self.llm:
+            return self.llm is not None
+        
+        try:
+            # Simple test with minimal prompt
+            test_response = self.llm.invoke("Hi")
+            if test_response:
+                st.success(f"✅ LLM Connection established: {self.model_name}")
+                self.connection_tested = True
+                return True
+            else:
+                st.error("❌ LLM connection test failed - no response")
+                return False
+                
+        except Exception as e:
+            st.error(f"❌ LLM connection test failed: {str(e)}")
+            st.info("""
+            **Troubleshooting for Ollama:**
+            1. Make sure Ollama is running: `ollama serve`
+            2. Check available models: `ollama list`
+            3. Pull the model if needed: `ollama pull gemma2:27b`
+            4. Verify the model name matches what you have installed
             """)
             return False
     
@@ -85,8 +107,15 @@ class LLMService:
             Dictionary containing the extracted and validated data
         """
         if not self.llm:
-            st.error("❌ LLM not initialized")
-            return {}
+            if development_mode:
+                st.error("❌ LLM not initialized")
+            return {model.__name__.lower(): model().model_dump()}
+        
+        # Test connection if not already done
+        if not self._test_connection():
+            if development_mode:
+                st.error("❌ LLM connection failed")
+            return {model.__name__.lower(): model().model_dump()}
         
         try:
             # Create parser for the model
@@ -106,7 +135,10 @@ class LLMService:
                 with st.expander(f"🔍 LLM Prompt for {model.__name__}"):
                     st.code(formatted_prompt)
             
-            # Get response from LLM
+            # Get response from LLM with timeout handling
+            if development_mode:
+                st.info(f"🤖 Requesting {model.__name__} from {self.model_name}...")
+            
             response = self.llm.invoke(formatted_prompt)
             
             if development_mode:
@@ -116,10 +148,13 @@ class LLMService:
             # Try to parse with Pydantic parser first
             try:
                 parsed_output = parser.parse(response)
-                return {model.__name__.lower(): parsed_output.dict()}
+                if development_mode:
+                    st.success(f"✅ Successfully parsed {model.__name__} with Pydantic")
+                return {model.__name__.lower(): parsed_output.model_dump()}
             except Exception as parse_error:
                 if development_mode:
-                    st.warning(f"Pydantic parsing failed: {parse_error}")
+                    st.warning(f"⚠️ Pydantic parsing failed for {model.__name__}: {parse_error}")
+                    st.info("🔧 Attempting manual JSON parsing...")
                 
                 # Fallback to manual JSON parsing
                 cleaned_response = self._clean_json_response(response)
@@ -127,12 +162,15 @@ class LLMService:
                 
                 # Validate with the model
                 validated_output = model(**json_output)
-                return {model.__name__.lower(): validated_output.dict()}
+                if development_mode:
+                    st.success(f"✅ Successfully parsed {model.__name__} with manual JSON parsing")
+                return {model.__name__.lower(): validated_output.model_dump()}
                 
         except Exception as e:
             if development_mode:
                 st.error(f"❌ LLM extraction failed for {model.__name__}: {str(e)}")
-            return {model.__name__.lower(): model().dict()}
+                st.exception(e)
+            return {model.__name__.lower(): model().model_dump()}
     
     def extract_simple(
         self,
@@ -150,7 +188,14 @@ class LLMService:
             Raw text response from LLM
         """
         if not self.llm:
-            st.error("❌ LLM not initialized")
+            if development_mode:
+                st.error("❌ LLM not initialized")
+            return ""
+        
+        # Test connection if not already done
+        if not self._test_connection():
+            if development_mode:
+                st.error("❌ LLM connection failed")
             return ""
         
         try:
@@ -198,11 +243,12 @@ class LLMService:
     
     def is_available(self) -> bool:
         """Check if LLM service is available."""
-        return self.llm is not None
+        return self.llm is not None and self._test_connection()
     
     def update_model(self, model_name: str):
         """Update the model being used."""
         self.model_name = model_name
+        self.connection_tested = False  # Reset connection test
         self._initialize_llm()
 
 

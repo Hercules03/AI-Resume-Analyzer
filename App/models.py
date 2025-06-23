@@ -94,13 +94,19 @@ class Resume(BaseModel):
     # Work Experience
     work_experiences: List[WorkExperience] = Field(default_factory=list)
     
-    # Years of Experience
+    # Years of Experience and Career Analysis
     YoE: Optional[str] = None
+    career_level: Optional[str] = None
+    primary_field: Optional[str] = None
     
-    # Additional metadata
+    # Additional metadata for gap analysis
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    portfolio: Optional[str] = None
+    
+    # System metadata
     file_path: Optional[str] = None
     extraction_timestamp: Optional[str] = None
-    resume_score: Optional[int] = None
     no_of_pages: Optional[int] = None
     
     @classmethod
@@ -127,65 +133,158 @@ class Resume(BaseModel):
                     all_skills.extend(skill_category)
         
         # Extract education data
-        education_list = education.get('educations', [])
+        education_data = education.get('educationlist', education.get('education', {}))
+        education_list = education_data.get('educations', []) if isinstance(education_data, dict) else []
         educations = [Education(**edu) for edu in education_list if isinstance(edu, dict)]
         
-        # Extract work experience data
-        experience_list = experience.get('work_experiences', [])
+        # Extract work experience data  
+        experience_data = experience.get('workexperiencelist', experience.get('experience', {}))
+        experience_list = experience_data.get('work_experiences', []) if isinstance(experience_data, dict) else []
         work_experiences = [WorkExperience(**exp) for exp in experience_list if isinstance(exp, dict)]
         
-        # Extract YoE data
+        # Extract YoE data (including career level and primary field)
         yoe_data = yoe.get('yoe', {})
         years_of_experience = yoe_data.get('total_years')
         yoe_str = f"{years_of_experience} years" if years_of_experience else None
+        career_level = yoe_data.get('career_level')
+        primary_field = yoe_data.get('primary_field')
         
         return cls(
             name=profile_data.get('name'),
             contact_number=profile_data.get('contact_number'),
             email=profile_data.get('email'),
+            linkedin=profile_data.get('linkedin'),
+            github=profile_data.get('github'),
+            portfolio=profile_data.get('portfolio'),
             skills=all_skills,
             educations=educations,
             work_experiences=work_experiences,
             YoE=yoe_str,
+            career_level=career_level,
+            primary_field=primary_field,
             file_path=pdf_file_path,
             extraction_timestamp=datetime.now().isoformat(),
-            resume_score=cls._calculate_resume_score(profile_data, all_skills, educations, work_experiences),
             no_of_pages=1  # Default, can be calculated from PDF
         )
     
-    @staticmethod
-    def _calculate_resume_score(profile: Dict, skills: List, educations: List, experiences: List) -> int:
-        """Calculate a resume completeness score."""
-        score = 0
+    def analyze_resume_gaps(self) -> Dict[str, List[str]]:
+        """
+        Analyze resume for missing or incomplete information.
+        Returns gaps categorized by section for HR review.
+        """
+        gaps = {
+            "critical_missing": [],      # Must-have information that's missing
+            "professional_missing": [],  # Professional profile gaps
+            "detail_gaps": []           # Information present but lacks detail
+        }
         
-        # Profile completeness (30 points)
-        if profile.get('name'): score += 10
-        if profile.get('email'): score += 10
-        if profile.get('contact_number'): score += 10
+        # === CRITICAL MISSING INFORMATION ===
+        if not self.name:
+            gaps["critical_missing"].append("❌ Candidate name not found")
+        if not self.email:
+            gaps["critical_missing"].append("❌ Email address not found")
+        if not self.contact_number:
+            gaps["critical_missing"].append("❌ Phone number not found")
         
-        # Skills (25 points)
-        if len(skills) > 0: score += 10
-        if len(skills) >= 5: score += 10
-        if len(skills) >= 10: score += 5
+        # === PROFESSIONAL PROFILE GAPS ===
+        if not self.linkedin:
+            gaps["professional_missing"].append("🔗 LinkedIn profile not provided")
+        if not self.github and self._appears_technical():
+            gaps["professional_missing"].append("🔗 GitHub profile not provided (technical role indicators found)")
+        if not self.portfolio and self._appears_creative():
+            gaps["professional_missing"].append("🔗 Portfolio/website not provided (creative role indicators found)")
         
-        # Education (20 points)
-        if len(educations) > 0: score += 20
+        # === WORK EXPERIENCE GAPS ===
+        if not self.work_experiences:
+            gaps["critical_missing"].append("❌ No work experience found")
+        else:
+            for i, exp in enumerate(self.work_experiences, 1):
+                issues = []
+                if not exp.job_title:
+                    issues.append("job title")
+                if not exp.company:
+                    issues.append("company name")
+                if not exp.duration and not (exp.start_date and exp.end_date):
+                    issues.append("duration/dates")
+                if not exp.responsibilities or len(exp.responsibilities) == 0:
+                    issues.append("job responsibilities")
+                
+                if issues:
+                    gaps["detail_gaps"].append(f"📝 Work experience #{i} missing: {', '.join(issues)}")
         
-        # Experience (25 points)
-        if len(experiences) > 0: score += 15
-        if len(experiences) >= 2: score += 10
+        # === EDUCATION GAPS ===
+        if not self.educations:
+            gaps["professional_missing"].append("🎓 No education information found")
+        else:
+            for i, edu in enumerate(self.educations, 1):
+                issues = []
+                if not edu.degree:
+                    issues.append("degree type")
+                if not edu.institution:
+                    issues.append("institution name")
+                if not edu.field_of_study:
+                    issues.append("field of study")
+                if not edu.graduation_date:
+                    issues.append("graduation date")
+                
+                if issues:
+                    gaps["detail_gaps"].append(f"🎓 Education #{i} missing: {', '.join(issues)}")
         
-        return min(score, 100)
+        # === SKILLS GAPS ===
+        if not self.skills:
+            gaps["critical_missing"].append("❌ No skills found")
+        
+        # === EXPERIENCE CALCULATION GAPS ===
+        if not self.YoE and self.work_experiences:
+            gaps["detail_gaps"].append("📊 Total experience calculation failed despite having work history")
+        
+        return gaps
+    
+    def _appears_technical(self) -> bool:
+        """Check if this appears to be a technical role based on skills."""
+        technical_keywords = ['python', 'java', 'javascript', 'sql', 'aws', 'docker', 'react', 'api', 'database', 'programming', 'software', 'developer', 'engineer']
+        skills_text = ' '.join(self.skills).lower()
+        return any(keyword in skills_text for keyword in technical_keywords)
+    
+    def _appears_creative(self) -> bool:
+        """Check if this appears to be a creative role based on skills."""
+        creative_keywords = ['design', 'photoshop', 'illustrator', 'figma', 'ui', 'ux', 'graphic', 'creative', 'adobe', 'sketch', 'portfolio']
+        skills_text = ' '.join(self.skills).lower()
+        return any(keyword in skills_text for keyword in creative_keywords)
+    
+    def get_completeness_summary(self) -> Dict[str, Any]:
+        """Get a summary of resume completeness for HR dashboard."""
+        gaps = self.analyze_resume_gaps()
+        
+        return {
+            "has_critical_gaps": len(gaps["critical_missing"]) > 0,
+            "total_gaps": sum(len(gap_list) for gap_list in gaps.values()),
+            "sections_complete": {
+                "basic_contact": bool(self.name and self.email and self.contact_number),
+                "work_experience": len(self.work_experiences) > 0,
+                "education": len(self.educations) > 0,
+                "skills": len(self.skills) > 0,
+                "professional_profiles": bool(self.linkedin)
+            },
+            "experience_years": self.YoE,
+            "skills_count": len(self.skills),
+            "jobs_count": len(self.work_experiences),
+            "education_count": len(self.educations)
+        }
     
     def to_legacy_format(self) -> Dict[str, Any]:
         """Convert to legacy format for backward compatibility."""
+        # For legacy compatibility, we'll use a simple completeness percentage
+        gaps = self.analyze_resume_gaps()
+        completeness_score = max(0, 100 - (len(gaps["critical_missing"]) * 20 + len(gaps["professional_missing"]) * 5))
+        
         return {
             'name': self.name,
             'email': self.email,
-            'mobile_number': self.contact_number,
+            'phone': self.contact_number,
             'skills': self.skills,
-            'education': [edu.dict() for edu in self.educations],
-            'experience': [exp.dict() for exp in self.work_experiences],
-            'no_of_pages': self.no_of_pages or 1,
-            'total_experience': self.YoE
+            'education': [edu.model_dump() for edu in self.educations],
+            'experience': [exp.model_dump() for exp in self.work_experiences],
+            'resume_score': completeness_score,
+            'no_of_pages': self.no_of_pages or 1
         } 

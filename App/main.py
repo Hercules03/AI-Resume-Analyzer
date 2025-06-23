@@ -25,8 +25,7 @@ from resume_processor import ResumeProcessor
 from llm_service import llm_service
 from llm_utils import (
     format_metadata_for_display, export_metadata_to_json,
-    display_clean_hr_summary, get_available_ollama_models,
-    create_model_selection_ui
+    display_clean_hr_summary, get_available_ollama_models
 )
 
 from streamlit_tags import st_tags
@@ -37,7 +36,7 @@ nltk.download('stopwords')
 # Set page configuration
 st.set_page_config(**PAGE_CONFIG)
 
-# Initialize resume processor
+# Initialize resume processor (uses sequential processing optimized for local Ollama)
 resume_processor = ResumeProcessor()
 
 
@@ -50,6 +49,20 @@ def run():
     st.sidebar.markdown("# Choose Module...")
     activities = ["Candidate Evaluation", "Feedback", "About", "Admin"]
     choice = st.sidebar.selectbox("Choose among the given options:", activities)
+    
+    # Model selection in sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🤖 AI Model")
+    llm_model = st.sidebar.selectbox(
+        "Select AI Model",
+        options=["gemma3:12b", "gemma3:27b", "deepseek-r1:14b"],
+        index=0,  # Default to 12b for better performance
+        help="gemma3:12b is fastest, gemma3:27b is more accurate, deepseek-r1:14b is reasoning model"
+    )
+    
+    # Update LLM service configuration if model changed
+    if llm_model != llm_service.model_name:
+        llm_service.update_model(llm_model)
     
     # Visitor counter
     st.sidebar.markdown('''
@@ -112,28 +125,7 @@ def handle_candidate_evaluation():
             help="Use specialized extractors with AI for better accuracy"
         )
         if enable_llm_extraction:
-            st.info("🧠 **AI-powered extraction enabled:** Using specialized extractors with concurrent processing")
-    
-    # LLM Configuration (only show if LLM extraction is enabled)
-    if enable_llm_extraction:
-        with st.expander("⚙️ **LLM Configuration**"):
-            col_model, col_url = st.columns(2)
-            
-            with col_url:
-                ollama_url = st.text_input(
-                    "Ollama URL",
-                    value="http://localhost:11434",
-                    help="Ollama server URL"
-                )
-            
-            with col_model:
-                # Use modular model selection UI
-                llm_model = create_model_selection_ui(ollama_url)
-            
-            # Update LLM service configuration
-            if ollama_url != llm_service.base_url or llm_model != llm_service.model_name:
-                llm_service.base_url = ollama_url
-                llm_service.update_model(llm_model)
+            st.info("🔄 **Sequential processing enabled:** Extractors run one at a time (optimized for local Ollama)")
     
     # Show extraction capabilities
     if dev_mode:
@@ -204,47 +196,116 @@ def handle_candidate_evaluation():
                 st.error("❌ **LLM service not available.** Please check your Ollama configuration.")
 
 
+def format_profile_link(url: str, platform: str) -> str:
+    """
+    Format profile URLs to be clickable links.
+    Adds protocol if missing and creates markdown link.
+    """
+    if not url:
+        return url
+    
+    # Clean up the URL
+    url = url.strip()
+    
+    # Add protocol if missing
+    if not url.startswith(('http://', 'https://')):
+        url = f"https://{url}"
+    
+    # Create markdown link with platform name
+    return f"[{platform} Profile]({url})"
+
+
 def display_resume_results(resume, dev_mode=False):
-    """Display the results from resume processing."""
+    """Display the results from resume processing with gap analysis."""
     
-    # Basic information summary
-    st.subheader("📊 **Resume Summary**")
-    col1, col2, col3, col4 = st.columns(4)
+    # Pre-calculate gap analysis and completeness summary to avoid loading delays
+    gaps = resume.analyze_resume_gaps()
+    completeness = resume.get_completeness_summary()
     
+    # === RESUME COMPLETENESS ANALYSIS ===
+    st.subheader("📋 **Resume Completeness Analysis**")
+    
+    # Summary metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.metric("Resume Score", f"{resume.resume_score}/100")
+        st.metric("Skills Found", completeness["skills_count"])
     with col2:
-        st.metric("Skills Found", len(resume.skills))
+        st.metric("Work Experience", completeness["jobs_count"])
     with col3:
-        st.metric("Work Experience", len(resume.work_experiences))
+        st.metric("Education", completeness["education_count"])
     with col4:
-        st.metric("Education", len(resume.educations))
+        if resume.career_level:
+            st.metric("Career Level", resume.career_level)
+        else:
+            st.metric("Career Level", "Not Determined")
+    with col5:
+        if completeness["has_critical_gaps"]:
+            st.metric("Status", "⚠️", delta="Issues Found")
+        else:
+            st.metric("Status", "✅", delta="Ready")
     
-    # Detailed information
-    if dev_mode or st.checkbox("🔍 **Show Detailed Analysis**"):
+    # === GAP ANALYSIS SECTION ===
+    if any(gap_list for gap_list in gaps.values() if gap_list):
+        st.subheader("⚠️ **Gap Analysis - Missing Information**")
         
-        # Profile Information
-        if resume.name or resume.email or resume.contact_number:
-            st.subheader("👤 **Profile Information**")
+        # Critical missing information
+        if gaps["critical_missing"]:
+            st.error("**Critical Missing Information:**")
+            for gap in gaps["critical_missing"]:
+                st.write(f"  {gap}")
+        
+        # Professional profile gaps
+        if gaps["professional_missing"]:
+            st.warning("**Professional Profile Gaps:**")
+            for gap in gaps["professional_missing"]:
+                st.write(f"  {gap}")
+        
+        # Detail gaps (HR focus - what information they don't have)
+        if gaps["detail_gaps"]:
+            st.info("**Information Gaps for HR Review:**")
+            for gap in gaps["detail_gaps"]:
+                st.write(f"  {gap}")
+    else:
+        st.success("✅ **No Major Gaps Detected** - This resume appears complete for general screening.")
+    
+    # === DETAILED INFORMATION SECTIONS ===
+    st.markdown("---")
+    
+    # Profile Information
+    if resume.name or resume.email or resume.contact_number:
+        with st.expander("👤 **Profile Information**", expanded=dev_mode):
             col1, col2, col3 = st.columns(3)
             with col1:
                 if resume.name:
                     st.write(f"**Name:** {resume.name}")
             with col2:
                 if resume.email:
-                    st.write(f"**Email:** {resume.email}")
+                    st.markdown(f"**Email:** [Send Email](mailto:{resume.email})")
             with col3:
                 if resume.contact_number:
                     st.write(f"**Contact:** {resume.contact_number}")
-        
-        # Skills
-        if resume.skills:
-            st.subheader("🛠️ **Skills**")
+            
+            # Professional profiles with clickable links
+            if resume.linkedin or resume.github or resume.portfolio:
+                st.write("**Professional Profiles:**")
+                if resume.linkedin:
+                    linkedin_link = format_profile_link(resume.linkedin, "LinkedIn")
+                    st.markdown(f"• **LinkedIn:** {linkedin_link}")
+                if resume.github:
+                    github_link = format_profile_link(resume.github, "GitHub")
+                    st.markdown(f"• **GitHub:** {github_link}")
+                if resume.portfolio:
+                    portfolio_link = format_profile_link(resume.portfolio, "Portfolio")
+                    st.markdown(f"• **Portfolio:** {portfolio_link}")
+    
+    # Skills
+    if resume.skills:
+        with st.expander(f"🛠️ **Skills ({len(resume.skills)} found)**", expanded=dev_mode):
             st.write(", ".join(resume.skills))
-        
-        # Work Experience
-        if resume.work_experiences:
-            st.subheader("💼 **Work Experience**")
+    
+    # Work Experience
+    if resume.work_experiences:
+        with st.expander(f"💼 **Work Experience ({len(resume.work_experiences)} entries)**", expanded=dev_mode):
             for i, exp in enumerate(resume.work_experiences, 1):
                 with st.expander(f"Position {i}: {exp.job_title or 'Unknown'} at {exp.company or 'Unknown'}"):
                     if exp.duration:
@@ -257,10 +318,20 @@ def display_resume_results(resume, dev_mode=False):
                             st.write(f"• {resp}")
                     if exp.technologies:
                         st.write(f"**Technologies:** {', '.join(exp.technologies)}")
-        
-        # Education
-        if resume.educations:
-            st.subheader("🎓 **Education**")
+                    
+                    # Show what information is missing for HR awareness
+                    missing = []
+                    if not exp.job_title: missing.append("job title")
+                    if not exp.company: missing.append("company")
+                    if not exp.duration and not (exp.start_date and exp.end_date): missing.append("duration")
+                    if not exp.responsibilities: missing.append("responsibilities")
+                    
+                    if missing:
+                        st.warning(f"⚠️ HR Note: Missing {', '.join(missing)} - may need follow-up")
+    
+    # Education
+    if resume.educations:
+        with st.expander(f"🎓 **Education ({len(resume.educations)} entries)**", expanded=dev_mode):
             for i, edu in enumerate(resume.educations, 1):
                 with st.expander(f"Education {i}: {edu.degree or 'Unknown'} in {edu.field_of_study or 'Unknown'}"):
                     if edu.institution:
@@ -271,11 +342,152 @@ def display_resume_results(resume, dev_mode=False):
                         st.write(f"**GPA:** {edu.gpa}")
                     if edu.honors:
                         st.write(f"**Honors:** {edu.honors}")
+                    
+                    # Show what information is missing for HR awareness
+                    missing = []
+                    if not edu.degree: missing.append("degree")
+                    if not edu.institution: missing.append("institution")
+                    if not edu.field_of_study: missing.append("field of study")
+                    if not edu.graduation_date: missing.append("graduation date")
+                    
+                    if missing:
+                        st.warning(f"⚠️ HR Note: Missing {', '.join(missing)} - may need follow-up")
+    
+    # Years of Experience & Experience Analysis
+    with st.expander("📈 **Experience Analysis**", expanded=dev_mode):
+        # Career Assessment Section
+        st.subheader("🎯 **Career Assessment**")
         
-        # Years of Experience
-        if resume.YoE:
-            st.subheader("📈 **Experience Analysis**")
-            st.write(f"**Total Experience:** {resume.YoE}")
+        # Create columns for career information
+        career_col1, career_col2, career_col3 = st.columns(3)
+        
+        with career_col1:
+            if resume.YoE:
+                st.write(f"**Total Experience:** {resume.YoE}")
+            else:
+                st.write("**Total Experience:** Not calculated")
+        
+        with career_col2:
+            if resume.career_level:
+                # Add visual indicators for career levels
+                level_indicators = {
+                    "Entry Level": "🟢",
+                    "Mid Level": "🟡", 
+                    "Senior Level": "🟠",
+                    "Executive Level": "🔴"
+                }
+                indicator = level_indicators.get(resume.career_level, "⚪")
+                st.write(f"**Career Level:** {indicator} {resume.career_level}")
+            else:
+                st.write("**Career Level:** Not determined")
+        
+        with career_col3:
+            if resume.primary_field:
+                st.write(f"**Primary Field:** {resume.primary_field}")
+            else:
+                st.write("**Primary Field:** Not determined")
+        
+        # Experience Breakdown
+        st.subheader("📊 **Experience Breakdown**")
+        
+        # Show work experience count and details
+        if resume.work_experiences:
+            st.write(f"**Work Experience Entries:** {len(resume.work_experiences)}")
+            
+            # Calculate actual duration from extracted data for validation
+            actual_months = 0
+            duration_specified_count = 0
+            
+            # Show experience progression for HR insight
+            if len(resume.work_experiences) > 1:
+                st.write("**Career Progression:**")
+            else:
+                st.write("**Work Experience:**")
+                
+            for i, exp in enumerate(resume.work_experiences):
+                title = exp.job_title or "Unknown Position"
+                company = exp.company or "Unknown Company"
+                duration = exp.duration or "Duration not specified"
+                
+                # Try to extract months from duration for validation
+                if exp.duration and exp.duration.lower() != "duration not specified":
+                    duration_specified_count += 1
+                    # Simple parsing for common formats
+                    duration_lower = exp.duration.lower()
+                    if "month" in duration_lower:
+                        try:
+                            months = int(''.join(filter(str.isdigit, duration_lower)))
+                            actual_months += months
+                        except:
+                            pass
+                    elif "year" in duration_lower:
+                        try:
+                            years = float(''.join(c for c in duration_lower if c.isdigit() or c == '.'))
+                            actual_months += years * 12
+                        except:
+                            pass
+                
+                if len(resume.work_experiences) > 1:
+                    st.write(f"  {i+1}. {title} at {company} ({duration})")
+                else:
+                    st.write(f"  • {title} at {company} ({duration})")
+            
+            # Experience validation - Check for discrepancies
+            if resume.YoE and duration_specified_count > 0:
+                try:
+                    ai_years = float(resume.YoE.replace(" years", ""))
+                    actual_years = actual_months / 12
+                    
+                    # If there's a significant discrepancy (more than 6 months difference)
+                    if abs(ai_years - actual_years) > 0.5:
+                        st.warning(f"⚠️ **HR Alert:** Experience discrepancy detected!")
+                        st.info(f"• **AI Calculated:** {ai_years} years")
+                        st.info(f"• **From Duration Data:** {actual_years:.1f} years ({actual_months} months)")
+                        st.info(f"• **Discrepancy:** {abs(ai_years - actual_years):.1f} years")
+                        
+                        if ai_years > actual_years:
+                            st.warning("💡 **HR Note:** AI may be including undated experience or making assumptions. Verify during interview.")
+                        else:
+                            st.warning("💡 **HR Note:** Some experience durations may not be properly extracted. Check original resume.")
+                        
+                        # Show which entries lack duration data
+                        missing_duration = [exp for exp in resume.work_experiences if not exp.duration or exp.duration == "Duration not specified"]
+                        if missing_duration:
+                            st.info(f"📝 **Missing Duration Info:** {len(missing_duration)} of {len(resume.work_experiences)} positions lack duration data")
+                    else:
+                        st.success(f"✅ **Experience Validation:** AI calculation ({ai_years} years) matches duration data ({actual_years:.1f} years)")
+                        
+                except Exception as e:
+                    if dev_mode:
+                        st.warning(f"⚠️ **Debug:** Experience validation failed: {e}")
+            
+            # Career level validation
+            if resume.career_level and resume.YoE:
+                try:
+                    years = float(resume.YoE.replace(" years", ""))
+                    expected_levels = {
+                        "Entry Level": (0, 2),
+                        "Mid Level": (2, 5),
+                        "Senior Level": (5, 10),
+                        "Executive Level": (10, float('inf'))
+                    }
+                    
+                    if resume.career_level in expected_levels:
+                        min_years, max_years = expected_levels[resume.career_level]
+                        if years < min_years or years > max_years:
+                            st.info(f"💡 **HR Note:** {years} years of experience may not align with {resume.career_level} classification. Consider validation during interview.")
+                except:
+                    pass  # Skip validation if parsing fails
+                
+            # Debug information for development mode
+            if dev_mode and not resume.YoE and resume.work_experiences:
+                st.warning("⚠️ **Debug Info:** YoE extraction may have failed. Work experience entries found but total experience not calculated.")
+                for i, exp in enumerate(resume.work_experiences, 1):
+                    if exp.duration:
+                        st.write(f"  - Position {i}: {exp.duration}")
+        else:
+            st.write("**Work Experience Entries:** 0")
+            st.warning("⚠️ **HR Note:** No work experience found - may indicate recent graduate or career changer")
     
     # Download options
     st.markdown("---")
@@ -285,7 +497,7 @@ def display_resume_results(resume, dev_mode=False):
     
     with col1:
         # JSON download
-        resume_json = resume.dict()
+        resume_json = resume.model_dump()
         json_str = export_metadata_to_json(resume_json)
         st.download_button(
             label="📄 Download JSON Data",
@@ -311,12 +523,12 @@ def display_resume_results(resume, dev_mode=False):
 def prepare_user_data_from_resume(resume, system_info, location_info, sec_token, pdf_name):
     """Prepare user data from Resume object for database insertion."""
     
-    # Calculate enhanced data
-    cand_level = "Unknown"
-    reco_field = "General"
+    # Use AI-extracted career level and field, with fallbacks
+    cand_level = resume.career_level or "Unknown"
+    reco_field = resume.primary_field or "General"
     
-    # Try to determine career level from experience
-    if resume.work_experiences:
+    # Fallback to rule-based determination if AI extraction failed
+    if cand_level == "Unknown" and resume.work_experiences:
         total_exp = len(resume.work_experiences)
         if total_exp >= 3:
             cand_level = "Senior Level"
@@ -325,8 +537,8 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
         else:
             cand_level = "Entry Level"
     
-    # Try to determine field from skills
-    if resume.skills:
+    # Fallback field determination if AI extraction failed
+    if reco_field == "General" and resume.skills:
         skills_str = " ".join(resume.skills).lower()
         if any(skill in skills_str for skill in ['python', 'data', 'machine learning', 'analytics']):
             reco_field = "Data Science & Analytics"
@@ -336,6 +548,10 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
             reco_field = "Backend Development"
         elif any(skill in skills_str for skill in ['mobile', 'android', 'ios']):
             reco_field = "Mobile Development"
+    
+    # Get completeness score from legacy format for database compatibility
+    legacy_data = resume.to_legacy_format()
+    completeness_score = legacy_data.get('resume_score', 50)  # Default to 50 if not available
     
     return {
         'sec_token': sec_token,
@@ -352,7 +568,7 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
         'act_mob': 'N/A',
         'name': resume.name or 'Unknown',
         'email': resume.email or 'unknown@email.com',
-        'resume_score': str(resume.resume_score),
+        'resume_score': str(completeness_score),
         'timestamp': get_current_timestamp(),
         'no_of_pages': str(resume.no_of_pages or 1),
         'reco_field': reco_field,

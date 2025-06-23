@@ -1,7 +1,6 @@
 """
-Resume processor using specialized extractors for concurrent processing.
+Resume processor using specialized extractors for sequential processing.
 """
-import concurrent.futures
 from typing import Dict, Any
 import streamlit as st
 from pdf_processing import pdf_processor
@@ -35,7 +34,7 @@ class ResumeProcessor:
     
     def process_resume(self, pdf_file_path: str, development_mode: bool = False) -> Resume:
         """
-        Process a single resume file using concurrent extraction.
+        Process a single resume file using sequential extraction.
         
         Args:
             pdf_file_path: Path to the PDF resume file
@@ -60,68 +59,15 @@ class ResumeProcessor:
                 with st.expander("📄 Extracted Text Preview"):
                     st.text(extracted_text[:1000] + "..." if len(extracted_text) > 1000 else extracted_text)
             
-            # Extract information concurrently using specialized extractors
+            # Process extractors sequentially
             if development_mode:
-                st.info("🔄 **Starting concurrent extraction with specialized extractors...**")
+                st.info("🔄 **Starting sequential extraction with specialized extractors...**")
+                st.info("💡 **Sequential mode optimized for local Ollama setups**")
             
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                # Submit all extraction tasks concurrently
-                future_profile = executor.submit(
-                    self.profile_extractor.extract, extracted_text, development_mode
-                )
-                future_skills = executor.submit(
-                    self.skills_extractor.extract, extracted_text, development_mode
-                )
-                future_education = executor.submit(
-                    self.education_extractor.extract, extracted_text, development_mode
-                )
-                future_experience = executor.submit(
-                    self.experience_extractor.extract, extracted_text, development_mode
-                )
-                future_yoe = executor.submit(
-                    self.yoe_extractor.extract, extracted_text, development_mode
-                )
-                
-                # Collect results with error handling
-                results = {}
-                
-                try:
-                    results['profile'] = future_profile.result(timeout=30)
-                except Exception as e:
-                    if development_mode:
-                        st.error(f"❌ Profile extraction failed: {e}")
-                    results['profile'] = {'profile': {}}
-                
-                try:
-                    results['skills'] = future_skills.result(timeout=30)
-                except Exception as e:
-                    if development_mode:
-                        st.error(f"❌ Skills extraction failed: {e}")
-                    results['skills'] = {'skills': {}}
-                
-                try:
-                    results['education'] = future_education.result(timeout=30)
-                except Exception as e:
-                    if development_mode:
-                        st.error(f"❌ Education extraction failed: {e}")
-                    results['education'] = {'educationlist': {'educations': []}}
-                
-                try:
-                    results['experience'] = future_experience.result(timeout=30)
-                except Exception as e:
-                    if development_mode:
-                        st.error(f"❌ Experience extraction failed: {e}")
-                    results['experience'] = {'workexperiencelist': {'work_experiences': []}}
-                
-                try:
-                    results['yoe'] = future_yoe.result(timeout=30)
-                except Exception as e:
-                    if development_mode:
-                        st.error(f"❌ YoE extraction failed: {e}")
-                    results['yoe'] = {'yoe': {}}
+            results = self._process_sequential(extracted_text, development_mode)
             
             if development_mode:
-                st.success("✅ **Concurrent extraction completed!**")
+                st.success("✅ **Extraction completed!**")
                 
                 # Show extraction summary
                 st.subheader("📊 **Extraction Summary**")
@@ -182,6 +128,56 @@ class ResumeProcessor:
             
             return self._create_empty_resume(pdf_file_path)
     
+    def _process_sequential(self, extracted_text: str, development_mode: bool) -> Dict[str, Any]:
+        """
+        Process extractors sequentially (optimized for local Ollama setups).
+        
+        Args:
+            extracted_text: The extracted resume text
+            development_mode: Whether to show detailed process
+            
+        Returns:
+            Dictionary containing all extraction results
+        """
+        results = {}
+        extractors = [
+            ("profile", self.profile_extractor),
+            ("skills", self.skills_extractor),
+            ("education", self.education_extractor),
+            ("experience", self.experience_extractor),
+            ("yoe", self.yoe_extractor)
+        ]
+        
+        # Process each extractor one by one
+        for extractor_name, extractor in extractors:
+            try:
+                if development_mode:
+                    st.info(f"🔄 Processing {extractor_name.title()} extractor...")
+                
+                result = extractor.extract(extracted_text, development_mode)
+                results[extractor_name] = result
+                
+                if development_mode:
+                    st.success(f"✅ {extractor_name.title()} extraction completed")
+                    
+            except Exception as e:
+                if development_mode:
+                    st.error(f"❌ {extractor_name.title()} extraction failed: {e}")
+                
+                # Provide fallback empty results
+                if extractor_name == 'profile':
+                    results[extractor_name] = {'profile': {}}
+                elif extractor_name == 'skills':
+                    results[extractor_name] = {'skills': {}}
+                elif extractor_name == 'education':
+                    results[extractor_name] = {'educationlist': {'educations': []}}
+                elif extractor_name == 'experience':
+                    results[extractor_name] = {'workexperiencelist': {'work_experiences': []}}
+                elif extractor_name == 'yoe':
+                    results[extractor_name] = {'yoe': {}}
+        
+        return results
+    
     def _create_empty_resume(self, pdf_file_path: str) -> Resume:
         """Create an empty resume object as fallback."""
         return Resume(
@@ -199,11 +195,9 @@ class ResumeProcessor:
     def get_extraction_capabilities(self) -> Dict[str, str]:
         """Get information about extraction capabilities."""
         return {
-            "Profile Information": "Name, contact details, online profiles",
-            "Skills": "Categorized technical and soft skills",
-            "Education": "Academic qualifications and details",
-            "Work Experience": "Professional background and achievements",
-            "Years of Experience": "Career level and experience analysis",
-            "Concurrent Processing": "Fast parallel extraction",
-            "Error Handling": "Robust processing with fallbacks"
+            "profile": "Personal information and contact details",
+            "skills": "Technical and soft skills categorization",
+            "education": "Academic background and qualifications",
+            "experience": "Work history and responsibilities",
+            "yoe": "Years of experience calculation"
         } 

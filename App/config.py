@@ -17,14 +17,15 @@ ADMIN_CONFIG = {
     'password': '@dmin1234'
 }
 
-# LLM Configuration
+# LLM Configuration (optimized for local Ollama usage)
 LLM_CONFIG = {
     'default_model': 'gemma3:12b',
     'default_url': 'http://localhost:11434',
     'temperature': 0.1,
-    'num_predict': 4096,
+    'num_predict': 4096,  # Reduced for better performance
     'top_k': 10,
-    'top_p': 0.9
+    'top_p': 0.9,
+    'timeout': 60  # Add timeout for requests
 }
 
 # File Upload Configuration
@@ -32,16 +33,6 @@ UPLOAD_CONFIG = {
     'allowed_extensions': ['pdf'],
     'max_file_size': 10 * 1024 * 1024,  # 10MB
     'upload_folder': './Uploaded_Resumes/'
-}
-
-# LLM Configuration
-LLM_CONFIG = {
-    'default_model': 'gemma3:12b',
-    'default_url': 'http://localhost:11434',
-    'temperature': 0.1,
-    'num_predict': 8192,
-    'top_k': 10,
-    'top_p': 0.9
 }
 
 # OCR Configuration
