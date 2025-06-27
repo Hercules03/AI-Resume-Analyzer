@@ -99,7 +99,7 @@ class PDFProcessor:
             return None
         
         if not PYMUPDF_AVAILABLE:
-            st.error("❌ PyMuPDF required for PDF to image conversion")
+            st.error("PyMuPDF required for PDF to image conversion")
             return None
         
         # Set defaults
@@ -113,12 +113,12 @@ class PDFProcessor:
         try:
             # GPU status reporting
             if use_gpu and GPU_AVAILABLE:
-                st.info("🚀 Using GPU acceleration for OCR")
+                pass
             elif use_gpu and not GPU_AVAILABLE:
                 st.warning("⚠️ GPU requested but not available, using CPU")
                 use_gpu = False
             else:
-                st.info("🔧 Using CPU for OCR processing")
+                pass
             
             # Initialize EasyOCR reader
             reader = easyocr.Reader(languages, gpu=use_gpu)
@@ -225,43 +225,38 @@ class PDFProcessor:
         """
         if development_mode:
             return self._extract_development_mode(pdf_path)
-        
-        st.info("🔍 Analyzing document for optimal text extraction...")
+
         
         # Tier 1: Try PyMuPDF4LLM (structured output)
         text = self.extract_with_pymupdf4llm(pdf_path)
         if text and self.evaluate_text_quality(text):
-            st.success("✅ Text extracted successfully using PyMuPDF4LLM")
             return text
         
         # Tier 2: Use EasyOCR for scanned documents
         if EASYOCR_AVAILABLE:
-            st.warning("📄 Document appears to be scanned. Using OCR...")
+            st.warning("Document appears to be scanned. Using OCR...")
             with st.spinner("🔄 Processing with OCR..."):
                 text = self.extract_with_easyocr(pdf_path)
                 if text and text.strip():
-                    st.success("✅ Text extracted successfully using EasyOCR")
                     return text
         else:
-            st.error("❌ OCR not available. Install: pip install easyocr opencv-python torch")
+            st.error("OCR not available. Install: pip install easyocr opencv-python torch")
         
         # Fallback
-        st.error("❌ Text extraction failed")
+        st.error("Text extraction failed")
         return "Error: Unable to extract text from the document."
     
     def _extract_development_mode(self, pdf_path: str) -> str:
-        """Development mode with detailed comparison"""
-        st.info("🚀 **DEVELOPMENT MODE** - Comparing extraction methods...")
-        
+        """Development mode with detailed comparison"""        
         # GPU settings
         col_gpu1, col_gpu2 = st.columns(2)
         with col_gpu1:
             if GPU_AVAILABLE:
-                use_gpu = st.checkbox("🚀 Use GPU for EasyOCR", value=True)
+                use_gpu = st.checkbox("Use GPU for EasyOCR", value=True)
                 gpu_info = torch.cuda.get_device_name(0)
-                st.success(f"🎮 GPU Detected: {gpu_info}")
+                st.success(f"GPU Detected: {gpu_info}")
             else:
-                st.warning("⚠️ No GPU detected - using CPU")
+                st.warning("No GPU detected - using CPU")
                 use_gpu = False
         
         with col_gpu2:
@@ -280,7 +275,7 @@ class PDFProcessor:
                 """)
             else:
                 gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                st.info(f"🧠 GPU Memory: {gpu_memory:.1f} GB")
+                st.info(f"GPU Memory: {gpu_memory:.1f} GB")
         
         # Create comparison columns
         col1, col2 = st.columns(2)
@@ -288,7 +283,7 @@ class PDFProcessor:
         
         # Test PyMuPDF4LLM
         with col1:
-            st.subheader("📚 PyMuPDF4LLM (Structured)")
+            st.subheader("PyMuPDF4LLM (Structured)")
             if PYMUPDF4LLM_AVAILABLE:
                 start_time = time.time()
                 text = self.extract_with_pymupdf4llm(pdf_path)
@@ -307,33 +302,33 @@ class PDFProcessor:
                         'words': words
                     }
                     
-                    st.success(f"✅ Extracted in {processing_time:.2f}s")
+                    st.success(f"Extracted in {processing_time:.2f}s")
                     st.metric("Characters", f"{chars:,}")
                     st.metric("Words", f"{words:,}")
-                    st.metric("Quality Check", "✅ PASSED" if quality else "❌ FAILED")
+                    st.metric("Quality Check", "PASSED" if quality else "FAILED")
                     
-                    with st.expander("📄 Preview (500 chars)"):
+                    with st.expander("Preview (500 chars)"):
                         st.code(text[:500] + "..." if len(text) > 500 else text, language="markdown")
                     
                     st.download_button(
-                        label="📥 Download PyMuPDF4LLM Text",
+                        label="Download PyMuPDF4LLM Text",
                         data=text,
                         file_name="resume_pymupdf4llm.md",
                         mime="text/markdown"
                     )
                 else:
-                    st.error("❌ No text extracted")
+                    st.error("No text extracted")
                     results['pymupdf4llm'] = None
             else:
-                st.warning("⚠️ PyMuPDF4LLM not available")
+                st.warning("PyMuPDF4LLM not available")
                 results['pymupdf4llm'] = None
         
         # Test EasyOCR
         with col2:
-            st.subheader("👁️ EasyOCR (Optical)")
+            st.subheader("EasyOCR (Optical)")
             if EASYOCR_AVAILABLE:
                 start_time = time.time()
-                with st.spinner("🔄 Processing with OCR..."):
+                with st.spinner("Processing with OCR..."):
                     text = self.extract_with_easyocr(pdf_path, use_gpu=use_gpu)
                 processing_time = time.time() - start_time
                 
@@ -350,25 +345,25 @@ class PDFProcessor:
                         'words': words
                     }
                     
-                    st.success(f"✅ Extracted in {processing_time:.2f}s")
+                    st.success(f"Extracted in {processing_time:.2f}s")
                     st.metric("Characters", f"{chars:,}")
                     st.metric("Words", f"{words:,}")
-                    st.metric("Quality Check", "✅ PASSED" if quality else "❌ FAILED")
+                    st.metric("Quality Check", "PASSED" if quality else "FAILED")
                     
-                    with st.expander("📄 Preview (500 chars)"):
+                    with st.expander("Preview (500 chars)"):
                         st.text(text[:500] + "..." if len(text) > 500 else text)
                     
                     st.download_button(
-                        label="📥 Download EasyOCR Text",
+                        label="Download EasyOCR Text",
                         data=text,
                         file_name="resume_easyocr.txt",
                         mime="text/plain"
                     )
                 else:
-                    st.warning("❌ No text extracted")
+                    st.warning("No text extracted")
                     results['easyocr'] = None
             else:
-                st.warning("⚠️ EasyOCR not available")
+                st.warning("EasyOCR not available")
                 results['easyocr'] = None
         
         # Comparison summary
@@ -379,7 +374,7 @@ class PDFProcessor:
     
     def _display_comparison_summary(self, results: Dict[str, Any]):
         """Display comparison summary table"""
-        st.subheader("📊 **Comparison Summary**")
+        st.subheader("Comparison Summary")
         
         comparison_data = []
         for method_name, method_data in results.items():
@@ -389,7 +384,7 @@ class PDFProcessor:
                     'Time (s)': f"{method_data['time']:.2f}",
                     'Characters': f"{method_data['chars']:,}",
                     'Words': f"{method_data['words']:,}",
-                    'Quality': "✅ PASSED" if method_data['quality'] else "❌ FAILED"
+                    'Quality': "PASSED" if method_data['quality'] else "FAILED"
                 })
         
         if comparison_data:
@@ -400,21 +395,21 @@ class PDFProcessor:
                 fastest = min(comparison_data, key=lambda x: float(x['Time (s)']))
                 longest_text = max(comparison_data, key=lambda x: int(x['Characters'].replace(',', '')))
                 
-                st.info(f"🏆 **Fastest:** {fastest['Method']} ({fastest['Time (s)']}s)")
-                st.info(f"📄 **Most Text:** {longest_text['Method']} ({longest_text['Characters']} chars)")
+                st.info(f"Fastest: {fastest['Method']} ({fastest['Time (s)']}s)")
+                st.info(f"Most Text: {longest_text['Method']} ({longest_text['Characters']} chars)")
     
     def _select_best_result(self, results: Dict[str, Any]) -> str:
         """Select the best extraction result"""
-        st.subheader("🎯 **Method Selection**")
+        st.subheader("Method Selection")
         
         if results.get('pymupdf4llm') and results['pymupdf4llm']['quality']:
-            st.success("📚 **PyMuPDF4LLM selected** (best structured output)")
+            st.success("PyMuPDF4LLM selected (best structured output)")
             return results['pymupdf4llm']['text']
         elif results.get('easyocr') and results['easyocr']['quality']:
-            st.warning("👁️ **EasyOCR selected** (fallback for scanned documents)")
+            st.warning("EasyOCR selected (fallback for scanned documents)")
             return results['easyocr']['text']
         else:
-            st.error("❌ **No method produced quality results**")
+            st.error("No method produced quality results")
             return "Error: Unable to extract text from the document."
 
 

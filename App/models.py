@@ -285,6 +285,5 @@ class Resume(BaseModel):
             'skills': self.skills,
             'education': [edu.model_dump() for edu in self.educations],
             'experience': [exp.model_dump() for exp in self.work_experiences],
-            'resume_score': completeness_score,
             'no_of_pages': self.no_of_pages or 1
         } 

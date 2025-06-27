@@ -65,7 +65,6 @@ def initialize_chromadb():
             'act_mob': '+1234567890',
             'name': 'John Doe',
             'email': 'john.doe@example.com',
-            'resume_score': '85',
             'timestamp': '2024-01-01T12:00:00',
             'no_of_pages': '2',
             'reco_field': 'Data Science & Analytics',

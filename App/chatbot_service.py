@@ -1,19 +1,21 @@
 """
-RAG-powered Chatbot Service for Candidate Search using LangGraph and ChromaDB
+RAG-powered Chatbot Service for Candidate Search using LangGraph and Specialists
 """
 import streamlit as st
 from typing import Dict, Any, List, Optional
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_ollama import ChatOllama
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from typing_extensions import Annotated, TypedDict
-import json
-import re
+
 from database import db_manager
-from config import LLM_CONFIG
+from config import LLM_CONFIG, SPECIALISTS_CONFIG
+from db_specialists import (
+    IntentSpecialist,
+    NameExtractionSpecialist, 
+    QueryEnhancementSpecialist,
+    ResponseGenerationSpecialist
+)
 
 
 class ChatState(TypedDict):
@@ -23,29 +25,23 @@ class ChatState(TypedDict):
     search_query: str
     search_results: List[Dict[str, Any]]
     user_intent: str
+    intent_confidence: float
 
 
 class CandidateSearchChatbot:
-    """RAG-powered chatbot for candidate search using LangGraph"""
+    """RAG-powered chatbot for candidate search using specialized LLM functions"""
     
     def __init__(self):
-        self.llm = None
         self.graph = None
         self.conversation_history = []
-        self._initialize_llm()
+        
+        # Initialize specialists
+        self.intent_specialist = IntentSpecialist(SPECIALISTS_CONFIG['intent_analysis'])
+        self.name_extraction_specialist = NameExtractionSpecialist(SPECIALISTS_CONFIG['name_extraction'])
+        self.query_enhancement_specialist = QueryEnhancementSpecialist(SPECIALISTS_CONFIG['query_enhancement'])
+        self.response_generation_specialist = ResponseGenerationSpecialist(SPECIALISTS_CONFIG['response_generation'])
+        
         self._build_graph()
-    
-    def _initialize_llm(self):
-        """Initialize the LLM for chatbot"""
-        try:
-            self.llm = ChatOllama(
-                model=LLM_CONFIG['default_model'],
-                base_url=LLM_CONFIG['default_url'],
-                temperature=0.3,  # Slightly higher for more conversational responses
-                num_predict=2048
-            )
-        except Exception as e:
-            st.error(f"❌ Failed to initialize chatbot LLM: {e}")
     
     def _build_graph(self):
         """Build the LangGraph workflow for RAG-powered conversation"""
@@ -76,47 +72,25 @@ class CandidateSearchChatbot:
         self.graph = workflow.compile()
     
     def _analyze_intent(self, state: ChatState) -> Dict[str, Any]:
-        """Analyze user intent from their message"""
+        """Analyze user intent using the intent specialist"""
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         
-        intent_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are an intent classifier for an HR candidate search system.
-            Analyze the user's message and determine their intent:
-            
-            1. "search" - Finding candidates based on skills, experience, requirements
-               Examples: "Find Python developers", "I need ML engineers", "Show me senior developers"
-            
-            2. "info" - Asking for specific information about candidates
-               Examples: "What's John's email?", "Tell me about Sarah", "Contact details for Mike"
-            
-            3. "general" - General questions, greetings, help requests
-               Examples: "Hello", "How does this work?", "What can you do?"
-            
-            Respond with only "search", "info", or "general".
-            
-            For "search" and "info" intents, also extract the search terms or candidate name."""),
-            HumanMessage(content=last_message)
-        ])
-        
         try:
-            response = self.llm.invoke(intent_prompt.format_messages())
-            intent = response.content.strip().lower()
-            
-            # Extract search query for both search and info intents
-            search_query = ""
-            if intent in ["search", "info"]:
-                search_query = last_message
+            # Use intent specialist
+            result = self.intent_specialist.execute(message=last_message)
             
             return {
-                "user_intent": intent,
-                "search_query": search_query
+                "user_intent": result['intent'],
+                "intent_confidence": result['confidence'],
+                "search_query": result['search_query']
             }
         
         except Exception as e:
             st.error(f"Intent analysis failed: {e}")
             return {
                 "user_intent": "general",
+                "intent_confidence": 0.5,
                 "search_query": ""
             }
     
@@ -137,15 +111,16 @@ class CandidateSearchChatbot:
         try:
             # For info requests, search more broadly to find specific candidates
             if user_intent == "info":
-                # Extract potential names from the query
-                candidate_name = self._extract_candidate_name(search_query)
+                # Extract potential names from the query using name extraction specialist
+                candidate_name = self.name_extraction_specialist.execute(query=search_query)
+                
                 if candidate_name:
                     search_results = db_manager.semantic_search_resumes(candidate_name, n_results=20)
                 else:
                     search_results = db_manager.semantic_search_resumes(search_query, n_results=20)
             else:
-                # Enhance the search query for better matching
-                enhanced_query = self._enhance_search_query(search_query)
+                # Enhance the search query for better matching using query enhancement specialist
+                enhanced_query = self.query_enhancement_specialist.execute(query=search_query)
                 search_results = db_manager.semantic_search_resumes(enhanced_query, n_results=10)
             
             # Create context from search results
@@ -163,60 +138,15 @@ class CandidateSearchChatbot:
                 "context": "Search failed due to technical error."
             }
     
-    def _extract_candidate_name(self, query: str) -> str:
-        """Extract candidate name from info queries"""
-        # Look for common patterns like "John's email", "contact for Sarah", "Tell me about Mike"
-        patterns = [
-            r"(?:email of|contact for|about|for)\s+([A-Za-z\s]+)",
-            r"([A-Za-z]+(?:\s+[A-Za-z]+)*)'s?\s+(?:email|contact|info)",
-            r"(?:who is|tell me about)\s+([A-Za-z\s]+)"
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, query, re.IGNORECASE)
-            if match:
-                name = match.group(1).strip()
-                # Clean up common words
-                name = re.sub(r'\b(the|a|an|his|her|their)\b', '', name, flags=re.IGNORECASE).strip()
-                if len(name) > 2:  # Ensure we have a meaningful name
-                    return name
-        
-        return ""
-    
-    def _enhance_search_query(self, query: str) -> str:
-        """Enhance search query for better semantic matching"""
-        
-        enhancement_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are a search query enhancer for candidate recruitment.
-            Take the user's natural language request and expand it into a comprehensive search query
-            that will find relevant candidates. Include related skills, experience levels, and requirements.
-            
-            Example:
-            Input: "Find me a Python developer"
-            Output: "Python developer software engineer programming backend web development Flask Django API REST experience"
-            
-            Input: "I need someone for machine learning"
-            Output: "machine learning data scientist AI artificial intelligence Python TensorFlow PyTorch deep learning neural networks data analysis statistics"
-            
-            Keep it concise but comprehensive."""),
-            HumanMessage(content=f"Enhance this search query: {query}")
-        ])
-        
-        try:
-            response = self.llm.invoke(enhancement_prompt.format_messages())
-            return response.content.strip()
-        except:
-            return query  # Fallback to original query
-    
     def _create_context_from_results(self, search_results: List[Dict[str, Any]], intent: str = "search") -> str:
-        """Create context string from search results for the LLM"""
+        """Create context string from search results for the LLM with detailed CV content"""
         
         if not search_results:
             return "No candidates found matching the search criteria."
         
         context_parts = []
         
-        # For info requests, provide more detailed information
+        # For info requests, provide comprehensive detailed information
         if intent == "info":
             for i, result in enumerate(search_results[:3], 1):  # Top 3 for info requests
                 metadata = result.get('metadata', {})
@@ -227,27 +157,45 @@ class CandidateSearchChatbot:
                 - Email: {metadata.get('email', 'Not provided')}
                 - Field: {metadata.get('reco_field', 'General')}
                 - Experience Level: {metadata.get('cand_level', 'Unknown')}
-                - Resume Score: {metadata.get('resume_score', '0')}%
                 - Location: {metadata.get('city', '')}, {metadata.get('state', '')}, {metadata.get('country', '')}
                 - Skills: {metadata.get('skills', 'Not specified')}
+                - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
                 - Resume File: {metadata.get('pdf_name', 'Unknown')}
                 - Match Score: {similarity}%
-                - Full Profile Data Available: Yes
+                
+                DETAILED WORK EXPERIENCE:
+                {metadata.get('work_experiences', 'No work experience details available')}
+                
+                EDUCATION BACKGROUND:
+                {metadata.get('educations', 'No education details available')}
+                
+                ADDITIONAL PROFILE DATA:
+                {metadata.get('full_resume_data', 'No additional data available')}
+                
+                CONTACT & PROFILE LINKS:
+                {metadata.get('contact_info', 'No contact information available')}
                 """
                 context_parts.append(candidate_info.strip())
         else:
-            # For search requests, provide summary information
+            # For search requests, provide summary information with key details
             for i, result in enumerate(search_results[:5], 1):  # Top 5 for searches
                 metadata = result.get('metadata', {})
                 similarity = round(result.get('similarity_score', 0) * 100, 1)
+                
+                # Extract first job for quick reference
+                work_exp = metadata.get('work_experiences', '')
+                first_job = "No work experience"
+                if work_exp and work_exp != '':
+                    first_job = work_exp.split(';')[0] if ';' in work_exp else work_exp[:150] + "..."
                 
                 candidate_info = f"""
                 Candidate {i}: {metadata.get('name', 'Unknown')}
                 - Email: {metadata.get('email', 'Not provided')}
                 - Field: {metadata.get('reco_field', 'General')}
                 - Experience Level: {metadata.get('cand_level', 'Unknown')}
-                - Resume Score: {metadata.get('resume_score', '0')}%
                 - Location: {metadata.get('city', '')}, {metadata.get('state', '')}
+                - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
+                - Recent/First Job: {first_job}
                 - Key Skills: {str(metadata.get('skills', 'Not specified'))[:100]}...
                 - Similarity Score: {similarity}%
                 """
@@ -256,83 +204,24 @@ class CandidateSearchChatbot:
         return "\n\n".join(context_parts)
     
     def _generate_response(self, state: ChatState) -> Dict[str, Any]:
-        """Generate final response using LLM with RAG context"""
+        """Generate final response using the response generation specialist"""
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         context = state.get("context", "")
         search_results = state.get("search_results", [])
         user_intent = state.get("user_intent", "general")
         
-        # Create response prompt based on intent
-        if user_intent == "search" and search_results:
-            system_message = """You are an experienced HR assistant with direct access to the company's candidate database. 
-            You have full access to all candidate information and can provide specific details when requested.
-            
-            Your role is to:
-            1. Help find candidates based on skills, experience, and requirements
-            2. Provide detailed candidate summaries with actionable insights
-            3. Suggest the best matches and explain why they're good fits
-            4. Give specific recommendations for next steps
-            
-            Be conversational, helpful, and provide all the information needed for HR decisions.
-            Always include specific details like names, scores, and contact information when available."""
-            
-            user_message = f"""
-            User request: {last_message}
-            
-            Search results from our candidate database:
-            {context}
-            
-            Please provide a helpful summary of the candidates found, highlighting the best matches and their qualifications.
-            Include specific names, scores, and key details that would help with the hiring decision.
-            """
-        
-        elif user_intent == "info" and search_results:
-            system_message = """You are an HR assistant with access to the complete candidate database.
-            The user is asking for specific information about a candidate. Provide all available details 
-            including contact information, skills, experience, and any other relevant data.
-            
-            Be direct and provide the specific information requested. If the user asks for an email 
-            or contact details, provide them from the database. This is an internal HR system."""
-            
-            user_message = f"""
-            User request: {last_message}
-            
-            Candidate information from database:
-            {context}
-            
-            Please provide the specific information requested about the candidate(s). 
-            If they're asking for contact details, provide the email address and any other relevant contact information.
-            """
-        
-        else:
-            system_message = """You are a helpful AI HR assistant for an internal candidate search system.
-            You have access to the company's resume database and can help HR professionals find and evaluate candidates.
-            
-            Explain your capabilities:
-            - Search for candidates by skills, experience, location, field
-            - Provide detailed candidate information including contact details
-            - Help with candidate evaluation and matching
-            - Answer questions about specific candidates in the database
-            
-            Be friendly, professional, and helpful. Guide users on how to make the most of the system."""
-            
-            user_message = last_message
-        
-        response_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=system_message),
-            MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content=user_message)
-        ])
-        
         try:
-            # Prepare chat history (last 6 messages for context)
-            chat_history = state.get("messages", [])[-6:]
-            
-            response = self.llm.invoke(response_prompt.format_messages(chat_history=chat_history))
+            # Use response generation specialist
+            response = self.response_generation_specialist.execute(
+                user_message=last_message,
+                intent=user_intent,
+                context=context,
+                search_results=search_results
+            )
             
             # Add the response to messages
-            new_messages = [AIMessage(content=response.content)]
+            new_messages = [AIMessage(content=response)]
             
             return {"messages": new_messages}
         
@@ -354,7 +243,8 @@ class CandidateSearchChatbot:
                 "context": "",
                 "search_query": "",
                 "search_results": [],
-                "user_intent": ""
+                "user_intent": "",
+                "intent_confidence": 0.0
             }
             
             # Run the graph
@@ -386,7 +276,22 @@ class CandidateSearchChatbot:
     
     def is_available(self) -> bool:
         """Check if chatbot is available"""
-        return self.llm is not None and self.graph is not None
+        return (
+            self.graph is not None and
+            self.intent_specialist.is_available() and
+            self.name_extraction_specialist.is_available() and
+            self.query_enhancement_specialist.is_available() and
+            self.response_generation_specialist.is_available()
+        )
+    
+    def get_specialists_status(self) -> Dict[str, bool]:
+        """Get the status of all specialists"""
+        return {
+            'intent_specialist': self.intent_specialist.is_available(),
+            'name_extraction_specialist': self.name_extraction_specialist.is_available(),
+            'query_enhancement_specialist': self.query_enhancement_specialist.is_available(),
+            'response_generation_specialist': self.response_generation_specialist.is_available()
+        }
 
 
 # Global chatbot instance

@@ -41,10 +41,8 @@ class VectorDatabaseManager:
                 )
             )
             
-            st.success("✅ ChromaDB Vector Database Connected")
-            
         except Exception as e:
-            st.error(f"❌ ChromaDB connection failed: {e}")
+            st.error(f"ChromaDB connection failed: {e}")
             raise
     
     def _initialize_collections(self):
@@ -64,22 +62,27 @@ class VectorDatabaseManager:
                 metadata={"description": "User feedback data"}
             )
             
-            st.info(f"📊 Collections ready: {len(self.client.list_collections())} active")
-            
         except Exception as e:
-            st.error(f"❌ Collection initialization failed: {e}")
+            st.error(f"Collection initialization failed: {e}")
             raise
     
     def insert_user_data(self, data: Dict[str, Any]) -> bool:
-        """Insert resume data into vector database with semantic embeddings"""
+        """Insert or update resume data with duplicate prevention and enhanced embeddings"""
         try:
-            # Generate unique ID
+            # Check for existing record based on email or name
+            existing_record_id = self._find_existing_record(data.get('email', ''), data.get('name', ''))
+            
+            if existing_record_id:
+                st.info(f"**Updating existing record** for {data.get('name', 'Unknown')} ({data.get('email', 'No email')})")
+                return self._update_existing_record(existing_record_id, data)
+            
+            # Generate unique ID for new record
             record_id = str(uuid.uuid4())
             
-            # Create document content for embedding (combining key resume information)
-            document_content = self._create_document_content(data)
+            # Create enhanced document content with tagged metadata
+            document_content = self._create_enhanced_document_content(data)
             
-            # Prepare metadata (non-embedded structured data)
+            # Prepare comprehensive metadata
             metadata = {
                 'sec_token': str(data.get('sec_token', '')),
                 'ip_add': str(data.get('ip_add', '')),
@@ -95,26 +98,37 @@ class VectorDatabaseManager:
                 'act_mob': str(data.get('act_mob', '')),
                 'name': str(data.get('name', 'Unknown')),
                 'email': str(data.get('email', '')),
-                'resume_score': str(data.get('resume_score', '0')),
                 'timestamp': str(data.get('timestamp', datetime.now().isoformat())),
                 'no_of_pages': str(data.get('no_of_pages', '1')),
                 'reco_field': str(data.get('reco_field', 'General')),
                 'cand_level': str(data.get('cand_level', 'Unknown')),
                 'pdf_name': str(data.get('pdf_name', '')),
-                'record_type': 'resume_analysis'
+                'record_type': 'resume_analysis',
+                # Enhanced metadata for robust searching
+                'skills': str(data.get('skills', '')),
+                'work_experiences': str(data.get('work_experiences', '')),
+                'educations': str(data.get('educations', '')),
+                'years_of_experience': str(data.get('years_of_experience', '')),
+                'field_specific_experience': str(data.get('field_specific_experience', '')),
+                'career_transition_history': str(data.get('career_transition_history', '')),
+                'primary_field': str(data.get('primary_field', '')),
+                'full_resume_data': str(data.get('full_resume_data', '')),
+                'extracted_text': str(data.get('extracted_text', '')),
+                'contact_info': str(data.get('contact_info', ''))
             }
             
-            # Add to collection with embedding
+            # Add to collection with enhanced embedding
             self.resume_collection.add(
                 documents=[document_content],
                 metadatas=[metadata],
                 ids=[record_id]
             )
             
+            st.success(f"**New record created** for {data.get('name', 'Unknown')}")
             return True
             
         except Exception as e:
-            st.error(f"❌ Resume data insertion failed: {e}")
+            st.error(f"Resume data insertion failed: {e}")
             return False
     
     def insert_feedback(self, data: Dict[str, Any]) -> bool:
@@ -146,7 +160,7 @@ class VectorDatabaseManager:
             return True
             
         except Exception as e:
-            st.error(f"❌ Feedback insertion failed: {e}")
+            st.error(f"Feedback insertion failed: {e}")
             return False
     
     def get_user_data(self) -> Optional[pd.DataFrame]:
@@ -177,14 +191,13 @@ class VectorDatabaseManager:
                     'act_mob': metadata.get('act_mob', ''),
                     'Name': metadata.get('name', ''),
                     'Email_ID': metadata.get('email', ''),
-                    'resume_score': metadata.get('resume_score', ''),
                     'Timestamp': metadata.get('timestamp', ''),
                     'Page_no': metadata.get('no_of_pages', ''),
                     'Predicted_Field': metadata.get('reco_field', ''),
                     'User_level': metadata.get('cand_level', ''),
                     'Actual_skills': metadata.get('skills', ''),
-                    'Recommended_skills': metadata.get('recommended_skills', ''),
-                    'Recommended_courses': metadata.get('courses', ''),
+                    'Field_Experience': metadata.get('field_specific_experience', ''),
+                    'Career_Transitions': metadata.get('career_transition_history', ''),
                     'pdf_name': metadata.get('pdf_name', '')
                 }
                 data_rows.append(row)
@@ -192,7 +205,7 @@ class VectorDatabaseManager:
             return pd.DataFrame(data_rows)
             
         except Exception as e:
-            st.error(f"❌ Failed to fetch user data: {e}")
+            st.error(f"Failed to fetch user data: {e}")
             return pd.DataFrame()
     
     def get_feedback_data(self) -> Optional[pd.DataFrame]:
@@ -237,9 +250,9 @@ class VectorDatabaseManager:
                 row = {
                     'ID': i + 1,
                     'ip_add': metadata.get('ip_add', ''),
-                    'resume_score': metadata.get('resume_score', ''),
                     'Predicted_Field': metadata.get('reco_field', ''),
                     'User_Level': metadata.get('cand_level', ''),
+                    'Field_Experience': metadata.get('field_specific_experience', ''),
                     'city': metadata.get('city', ''),
                     'state': metadata.get('state', ''),
                     'country': metadata.get('country', '')
@@ -307,7 +320,6 @@ class VectorDatabaseManager:
                         'email': results['metadatas'][0][i].get('email', ''),
                         'field': results['metadatas'][0][i].get('reco_field', ''),
                         'level': results['metadatas'][0][i].get('cand_level', ''),
-                        'score': results['metadatas'][0][i].get('resume_score', ''),
                         'similarity': round((1 - results['distances'][0][i]) * 100, 2),
                         'pdf_name': results['metadatas'][0][i].get('pdf_name', '')
                     }
@@ -319,35 +331,168 @@ class VectorDatabaseManager:
             st.error(f"❌ Similar candidates search failed: {e}")
             return []
     
-    def _create_document_content(self, data: Dict[str, Any]) -> str:
-        """Create rich document content for semantic embedding"""
+    def _find_existing_record(self, email: str, name: str) -> Optional[str]:
+        """Find existing record by email or name to prevent duplicates"""
+        try:
+            if not email and not name:
+                return None
+            
+            # Search by email first (more reliable)
+            if email:
+                results = self.resume_collection.get(
+                    where={"email": email},
+                    include=['metadatas']
+                )
+                if results['ids']:
+                    return results['ids'][0]
+            
+            # If no email match, search by name
+            if name and name != 'Unknown':
+                results = self.resume_collection.get(
+                    where={"name": name},
+                    include=['metadatas']
+                )
+                if results['ids']:
+                    return results['ids'][0]
+            
+            return None
+            
+        except Exception as e:
+            st.warning(f"⚠️ Duplicate check failed: {e}")
+            return None
+    
+    def _update_existing_record(self, record_id: str, new_data: Dict[str, Any]) -> bool:
+        """Update existing record with new data"""
+        try:
+            # Delete old record
+            self.resume_collection.delete(ids=[record_id])
+            
+            # Create enhanced document content
+            document_content = self._create_enhanced_document_content(new_data)
+            
+            # Prepare updated metadata
+            metadata = {
+                'sec_token': str(new_data.get('sec_token', '')),
+                'ip_add': str(new_data.get('ip_add', '')),
+                'host_name': str(new_data.get('host_name', '')),
+                'dev_user': str(new_data.get('dev_user', '')),
+                'os_name_ver': str(new_data.get('os_name_ver', '')),
+                'latlong': str(new_data.get('latlong', '')),
+                'city': str(new_data.get('city', '')),
+                'state': str(new_data.get('state', '')),
+                'country': str(new_data.get('country', '')),
+                'act_name': str(new_data.get('act_name', '')),
+                'act_mail': str(new_data.get('act_mail', '')),
+                'act_mob': str(new_data.get('act_mob', '')),
+                'name': str(new_data.get('name', 'Unknown')),
+                'email': str(new_data.get('email', '')),
+                'timestamp': str(new_data.get('timestamp', datetime.now().isoformat())),
+                'no_of_pages': str(new_data.get('no_of_pages', '1')),
+                'reco_field': str(new_data.get('reco_field', 'General')),
+                'cand_level': str(new_data.get('cand_level', 'Unknown')),
+                'pdf_name': str(new_data.get('pdf_name', '')),
+                'record_type': 'resume_analysis',
+                'skills': str(new_data.get('skills', '')),
+                'work_experiences': str(new_data.get('work_experiences', '')),
+                'educations': str(new_data.get('educations', '')),
+                'years_of_experience': str(new_data.get('years_of_experience', '')),
+                'field_specific_experience': str(new_data.get('field_specific_experience', '')),
+                'career_transition_history': str(new_data.get('career_transition_history', '')),
+                'primary_field': str(new_data.get('primary_field', '')),
+                'full_resume_data': str(new_data.get('full_resume_data', '')),
+                'extracted_text': str(new_data.get('extracted_text', '')),
+                'contact_info': str(new_data.get('contact_info', '')),
+                'updated_at': datetime.now().isoformat()
+            }
+            
+            # Re-add with same ID
+            self.resume_collection.add(
+                documents=[document_content],
+                metadatas=[metadata],
+                ids=[record_id]
+            )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Record update failed: {e}")
+            return False
+    
+    def _create_enhanced_document_content(self, data: Dict[str, Any]) -> str:
+        """Create enhanced document content using tagged metadata approach"""
+        
+        # Use the tagged extracted text as the primary document content
+        extracted_text = data.get('extracted_text', '')
+        if extracted_text:
+            # The tagged text already contains structured metadata
+            base_content = extracted_text
+        else:
+            # Fallback to basic content creation
+            base_content = self._create_basic_document_content(data)
+        
+        # Add contextual information for better embeddings
+        context_parts = []
+        
+        # Field-specific experience context
+        field_exp = data.get('field_specific_experience', '')
+        if field_exp:
+            context_parts.append(f"[CONTEXT:FIELD_EXPERIENCE] {field_exp}")
+        
+        # Career transition context
+        transitions = data.get('career_transition_history', '')
+        if transitions and transitions != 'No transitions detected':
+            context_parts.append(f"[CONTEXT:CAREER_TRANSITIONS] {transitions}")
+        
+        # Combine base content with context
+        if context_parts:
+            return f"{base_content} || {' || '.join(context_parts)}"
+        else:
+            return base_content
+    
+    def _create_basic_document_content(self, data: Dict[str, Any]) -> str:
+        """Create basic document content as fallback"""
         name = data.get('name', 'Unknown Candidate')
         field = data.get('reco_field', 'General')
         level = data.get('cand_level', 'Unknown Level')
         skills = str(data.get('skills', ''))
-        score = data.get('resume_score', '0')
         
-        # Create a rich text representation for better embeddings
-        content = f"""
-        Candidate: {name}
-        Professional Field: {field}
-        Experience Level: {level}
-        Resume Completeness Score: {score}%
-        Skills and Competencies: {skills}
-        Location: {data.get('city', '')}, {data.get('state', '')}, {data.get('country', '')}
-        """
+        # Start with basic information
+        content_parts = [
+            f"Candidate: {name}",
+            f"Professional Field: {field}",
+            f"Experience Level: {level}",
+            f"Skills and Competencies: {skills}",
+            f"Location: {data.get('city', '')}, {data.get('state', '')}, {data.get('country', '')}"
+        ]
         
-        return content.strip()
+        # Add detailed information if available
+        work_experiences = data.get('work_experiences', '')
+        if work_experiences:
+            content_parts.append(f"Work Experience Details: {work_experiences}")
+        
+        educations = data.get('educations', '')
+        if educations:
+            content_parts.append(f"Education Background: {educations}")
+        
+        years_exp = data.get('years_of_experience', '')
+        if years_exp:
+            content_parts.append(f"Years of Experience: {years_exp}")
+        
+        full_data = data.get('full_resume_data', '')
+        if full_data:
+            content_parts.append(f"Additional Resume Information: {full_data}")
+        
+        return "\n".join(content_parts)
     
     def reset_database(self) -> bool:
         """Reset all collections (useful for development)"""
         try:
             self.client.reset()
             self._initialize_collections()
-            st.success("✅ Vector database reset successfully")
+            st.success("Vector database reset successfully")
             return True
         except Exception as e:
-            st.error(f"❌ Database reset failed: {e}")
+            st.error(f"Database reset failed: {e}")
             return False
     
     def get_database_stats(self) -> Dict[str, Any]:
@@ -363,6 +508,237 @@ class VectorDatabaseManager:
         except Exception as e:
             st.error(f"❌ Failed to get database stats: {e}")
             return {}
+    
+    # CRUD Operations for Database Management
+    
+    def get_resume_by_id(self, record_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific resume record by ID"""
+        try:
+            results = self.resume_collection.get(
+                ids=[record_id],
+                include=['documents', 'metadatas']
+            )
+            
+            if results['metadatas'] and results['metadatas'][0]:
+                return {
+                    'id': record_id,
+                    'document': results['documents'][0] if results['documents'] else '',
+                    'metadata': results['metadatas'][0]
+                }
+            return None
+            
+        except Exception as e:
+            st.error(f"❌ Failed to get resume record: {e}")
+            return None
+    
+    def get_feedback_by_id(self, record_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific feedback record by ID"""
+        try:
+            results = self.feedback_collection.get(
+                ids=[record_id],
+                include=['documents', 'metadatas']
+            )
+            
+            if results['metadatas'] and results['metadatas'][0]:
+                return {
+                    'id': record_id,
+                    'document': results['documents'][0] if results['documents'] else '',
+                    'metadata': results['metadatas'][0]
+                }
+            return None
+            
+        except Exception as e:
+            st.error(f"❌ Failed to get feedback record: {e}")
+            return None
+    
+    def get_all_resume_ids(self) -> List[str]:
+        """Get all resume record IDs"""
+        try:
+            results = self.resume_collection.get()
+            return results.get('ids', [])
+        except Exception as e:
+            st.error(f"❌ Failed to get resume IDs: {e}")
+            return []
+    
+    def get_all_feedback_ids(self) -> List[str]:
+        """Get all feedback record IDs"""
+        try:
+            results = self.feedback_collection.get()
+            return results.get('ids', [])
+        except Exception as e:
+            st.error(f"❌ Failed to get feedback IDs: {e}")
+            return []
+    
+    def update_resume_record(self, record_id: str, updated_data: Dict[str, Any]) -> bool:
+        """Update a resume record"""
+        try:
+            # Get existing record
+            existing = self.get_resume_by_id(record_id)
+            if not existing:
+                st.error("Record not found")
+                return False
+            
+            # Update metadata
+            updated_metadata = existing['metadata'].copy()
+            updated_metadata.update({
+                'name': str(updated_data.get('name', updated_metadata.get('name', ''))),
+                'email': str(updated_data.get('email', updated_metadata.get('email', ''))),
+                'reco_field': str(updated_data.get('reco_field', updated_metadata.get('reco_field', ''))),
+                'cand_level': str(updated_data.get('cand_level', updated_metadata.get('cand_level', ''))),
+                'city': str(updated_data.get('city', updated_metadata.get('city', ''))),
+                'state': str(updated_data.get('state', updated_metadata.get('state', ''))),
+                'skills': str(updated_data.get('skills', updated_metadata.get('skills', ''))),
+                'pdf_name': str(updated_data.get('pdf_name', updated_metadata.get('pdf_name', '')))
+            })
+            
+            # Create updated document content
+            updated_document = self._create_document_content(updated_metadata)
+            
+            # Delete old record and add updated one
+            self.resume_collection.delete(ids=[record_id])
+            self.resume_collection.add(
+                documents=[updated_document],
+                metadatas=[updated_metadata],
+                ids=[record_id]
+            )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Failed to update resume record: {e}")
+            return False
+    
+    def update_feedback_record(self, record_id: str, updated_data: Dict[str, Any]) -> bool:
+        """Update a feedback record"""
+        try:
+            # Get existing record
+            existing = self.get_feedback_by_id(record_id)
+            if not existing:
+                st.error("Record not found")
+                return False
+            
+            # Update metadata
+            updated_metadata = existing['metadata'].copy()
+            updated_metadata.update({
+                'feed_name': str(updated_data.get('feed_name', updated_metadata.get('feed_name', ''))),
+                'feed_email': str(updated_data.get('feed_email', updated_metadata.get('feed_email', ''))),
+                'feed_score': str(updated_data.get('feed_score', updated_metadata.get('feed_score', ''))),
+                'comments': str(updated_data.get('comments', updated_metadata.get('comments', '')))
+            })
+            
+            # Create updated document content
+            updated_document = f"Feedback from {updated_metadata.get('feed_name', '')}: {updated_metadata.get('comments', '')}"
+            
+            # Delete old record and add updated one
+            self.feedback_collection.delete(ids=[record_id])
+            self.feedback_collection.add(
+                documents=[updated_document],
+                metadatas=[updated_metadata],
+                ids=[record_id]
+            )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Failed to update feedback record: {e}")
+            return False
+    
+    def delete_resume_record(self, record_id: str) -> bool:
+        """Delete a resume record"""
+        try:
+            self.resume_collection.delete(ids=[record_id])
+            return True
+        except Exception as e:
+            st.error(f"❌ Failed to delete resume record: {e}")
+            return False
+    
+    def delete_feedback_record(self, record_id: str) -> bool:
+        """Delete a feedback record"""
+        try:
+            self.feedback_collection.delete(ids=[record_id])
+            return True
+        except Exception as e:
+            st.error(f"❌ Failed to delete feedback record: {e}")
+            return False
+    
+    def create_manual_resume_record(self, data: Dict[str, Any]) -> bool:
+        """Create a new resume record manually"""
+        try:
+            # Generate unique ID
+            record_id = str(uuid.uuid4())
+            
+            # Create document content
+            document_content = self._create_document_content(data)
+            
+            # Prepare metadata
+            metadata = {
+                'sec_token': str(data.get('sec_token', str(uuid.uuid4()))),
+                'name': str(data.get('name', '')),
+                'email': str(data.get('email', '')),
+                'reco_field': str(data.get('reco_field', 'General')),
+                'cand_level': str(data.get('cand_level', 'Unknown')),
+                'city': str(data.get('city', '')),
+                'state': str(data.get('state', '')),
+                'country': str(data.get('country', '')),
+                'skills': str(data.get('skills', '')),
+                'pdf_name': str(data.get('pdf_name', 'Manual Entry')),
+                'timestamp': datetime.now().isoformat(),
+                'record_type': 'resume_analysis',
+                'ip_add': str(data.get('ip_add', 'Manual')),
+                'host_name': str(data.get('host_name', 'Manual')),
+                'dev_user': str(data.get('dev_user', 'Manual')),
+                'os_name_ver': str(data.get('os_name_ver', 'Manual')),
+                'latlong': str(data.get('latlong', '')),
+                'act_name': str(data.get('act_name', 'MANUAL_ENTRY')),
+                'act_mail': str(data.get('act_mail', 'manual@system.com')),
+                'act_mob': str(data.get('act_mob', 'N/A')),
+                'no_of_pages': str(data.get('no_of_pages', '1'))
+            }
+            
+            # Add to collection
+            self.resume_collection.add(
+                documents=[document_content],
+                metadatas=[metadata],
+                ids=[record_id]
+            )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Failed to create resume record: {e}")
+            return False
+    
+    def create_manual_feedback_record(self, data: Dict[str, Any]) -> bool:
+        """Create a new feedback record manually"""
+        try:
+            # Generate unique ID
+            record_id = str(uuid.uuid4())
+            
+            # Create document content
+            document_content = f"Feedback from {data.get('feed_name', '')}: {data.get('comments', '')}"
+            
+            # Prepare metadata
+            metadata = {
+                'feed_name': str(data.get('feed_name', '')),
+                'feed_email': str(data.get('feed_email', '')),
+                'feed_score': str(data.get('feed_score', '5')),
+                'comments': str(data.get('comments', '')),
+                'timestamp': datetime.now().isoformat(),
+                'record_type': 'user_feedback'
+            }
+            
+            # Add to collection
+            self.feedback_collection.add(
+                documents=[document_content],
+                metadatas=[metadata],
+                ids=[record_id]
+            )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Failed to create feedback record: {e}")
+            return False
     
     def close(self):
         """Close database connections (ChromaDB handles this automatically)"""

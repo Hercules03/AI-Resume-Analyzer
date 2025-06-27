@@ -119,7 +119,7 @@ def show_pdf(file_path: str) -> str:
 
 
 def prepare_user_data(resume_data: Dict[str, Any], llm_metadata: Optional[Dict[str, Any]], 
-                     pdf_name: str, resume_score: int) -> Dict[str, Any]:
+                     pdf_name: str) -> Dict[str, Any]:
     """Prepare user data for database insertion"""
     
     # Get system and location info
@@ -186,7 +186,6 @@ def prepare_user_data(resume_data: Dict[str, Any], llm_metadata: Optional[Dict[s
         'act_mob': 'N/A',
         'name': resume_data.get('name', 'Unknown'),
         'email': resume_data.get('email', 'unknown@email.com'),
-        'resume_score': str(resume_score),
         'timestamp': get_current_timestamp(),
         'no_of_pages': str(resume_data.get('no_of_pages', 1)),
         'reco_field': reco_field,

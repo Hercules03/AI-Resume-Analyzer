@@ -153,7 +153,7 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
         st.warning("No AI analysis available")
         return
     
-    st.markdown("## 🎯 **AI Candidate Summary**")
+    st.markdown("## **AI Candidate Summary**")
     
     # Critical HR Metrics - Clean and Simple
     col1, col2, col3, col4 = st.columns(4)
@@ -183,31 +183,31 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
         
         with col_info1:
             if personal.get('full_name'):
-                st.markdown(f"**👤 Name:** {personal['full_name']}")
+                st.markdown(f"**Name:** {personal['full_name']}")
             if personal.get('email'):
-                st.markdown(f"**📧 Email:** {personal['email']}")
+                st.markdown(f"**Email:** {personal['email']}")
             if personal.get('phone'):
-                st.markdown(f"**📱 Phone:** {personal['phone']}")
+                st.markdown(f"**Phone:** {personal['phone']}")
         
         with col_info2:
             if personal.get('linkedin'):
                 linkedin_url = personal['linkedin']
                 if not linkedin_url.startswith('http'):
                     linkedin_url = f"https://{linkedin_url}"
-                st.markdown(f"**🔗 LinkedIn:** <a href='{linkedin_url}' target='_blank'>View Profile</a>", unsafe_allow_html=True)
+                st.markdown(f"**LinkedIn:** <a href='{linkedin_url}' target='_blank'>View Profile</a>", unsafe_allow_html=True)
             if personal.get('github'):
                 github_url = personal['github']
                 if not github_url.startswith('http'):
                     github_url = f"https://{github_url}"
-                st.markdown(f"**💻 GitHub:** <a href='{github_url}' target='_blank'>View Profile</a>", unsafe_allow_html=True)
+                st.markdown(f"**GitHub:** <a href='{github_url}' target='_blank'>View Profile</a>", unsafe_allow_html=True)
             location = f"{personal.get('city', '')}, {personal.get('country', '')}" if personal.get('city') or personal.get('country') else None
             if location and location != ", ":
-                st.markdown(f"**📍 Location:** {location}")
+                st.markdown(f"**Location:** {location}")
     
     # Top Skills - Key Technologies Only
     skills = llm_metadata.get('skills', {})
     if skills:
-        st.markdown("### 🛠️ **Key Skills**")
+        st.markdown("### **Key Skills**")
         
         # Get programming languages and frameworks (most relevant for HR)
         key_categories = ['programming_languages', 'frameworks_libraries', 'tools_platforms']
@@ -223,10 +223,10 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
     # Recent Work Experience - Top 2 Only
     work_exp = llm_metadata.get('work_experience', [])
     if work_exp:
-        st.markdown("### 💼 **Recent Experience**")
+        st.markdown("### **Recent Experience**")
         
         for i, job in enumerate(work_exp[:2]):  # Show only top 2 recent positions
-            with st.expander(f"📍 {job.get('job_title', 'Position')} at {job.get('company', 'Company')}", expanded=(i == 0)):
+            with st.expander(f"{job.get('job_title', 'Position')} at {job.get('company', 'Company')}", expanded=(i == 0)):
                 col_job1, col_job2 = st.columns([2, 1])
                 
                 with col_job1:
@@ -243,14 +243,14 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
     # Education - Summary Only
     education = llm_metadata.get('education', [])
     if education:
-        st.markdown("### 🎓 **Education**")
+        st.markdown("### **Education**")
         for i, edu in enumerate(education[:2]):  # Show only top 2 education entries
             degree_info = f"{edu.get('degree', 'Degree')} in {edu.get('field_of_study', 'Field')}"
             if edu.get('institution'):
                 degree_info += f" from {edu['institution']}"
             if edu.get('graduation_date'):
                 degree_info += f" ({edu['graduation_date']})"
-            st.markdown(f"• {degree_info}")
+            st.markdown(f"{degree_info}")
     
     # Certifications - Count Only
     certifications = llm_metadata.get('certifications', [])
@@ -261,19 +261,19 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
         
         with col_cert:
             if certifications:
-                st.markdown(f"### 🏆 **Certifications ({len(certifications)})**")
+                st.markdown(f"### **Certifications ({len(certifications)})**")
                 for cert in certifications[:3]:  # Show only top 3
-                    st.markdown(f"• {cert.get('name', 'Certification')}")
+                    st.markdown(f"{cert.get('name', 'Certification')}")
         
         with col_proj:
             if projects:
-                st.markdown(f"### 🚀 **Projects ({len(projects)})**")
+                st.markdown(f"### **Projects ({len(projects)})**")
                 for proj in projects[:3]:  # Show only top 3
-                    st.markdown(f"• {proj.get('name', 'Project')}")
+                    st.markdown(f"{proj.get('name', 'Project')}")
     
     # Final Quick Assessment
     st.markdown("---")
-    st.markdown("### ⚡ **Quick Assessment**")
+    st.markdown("### **Quick Assessment**")
     
     assessment_col1, assessment_col2 = st.columns(2)
     
@@ -281,11 +281,11 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
         # Experience assessment
         exp_years = llm_metadata.get('total_experience_years', 0) or 0
         if exp_years >= 5:
-            st.success(f"✅ **Experienced** - {exp_years} years in field")
+            st.success(f"**Experienced** - {exp_years} years in field")
         elif exp_years >= 2:
-            st.info(f"🔵 **Mid-level** - {exp_years} years experience")
+            st.info(f"**Mid-level** - {exp_years} years experience")
         else:
-            st.warning(f"🟡 **Junior** - {exp_years} years experience")
+            st.warning(f"**Junior** - {exp_years} years experience")
     
     with assessment_col2:
         # Profile completeness
@@ -293,13 +293,12 @@ def display_clean_hr_summary(llm_metadata: Dict[str, Any], resume_data: Dict[str
         total_sections = len([x for x in [work_exp, education, skills, certifications] if x])
         
         if total_sections >= 3 and personal_completeness >= 3:
-            st.success("✅ **Complete Profile**")
+            st.success("**Complete Profile**")
         elif total_sections >= 2:
-            st.info("🔵 **Good Profile**")
+            st.info("**Good Profile**")
         else:
-            st.warning("🟡 **Basic Profile**")
+            st.warning("**Basic Profile**")
     
-    st.success("🎯 **AI Analysis Complete** - Ready for HR review")
 
 
 def validate_ollama_connection(base_url: str, model_name: str) -> bool:
@@ -327,14 +326,13 @@ def create_model_selection_ui(base_url: str) -> str:
     available_models = get_available_ollama_models(base_url)
     
     if available_models:
-        st.success(f"✅ Found {len(available_models)} available models")
         
         # Recommended models for resume analysis
         recommended_models = ["gemma2:27b", "gemma2:9b", "llama3.1:8b", "mistral:7b", "qwen2.5:14b"]
         recommended_available = [model for model in recommended_models if model in available_models]
         
         if recommended_available:
-            st.info(f"🎯 Recommended models: {', '.join(recommended_available)}")
+            st.info(f"Recommended models: {', '.join(recommended_available)}")
         
         selected_model = st.selectbox(
             "Model Selection",
@@ -343,18 +341,12 @@ def create_model_selection_ui(base_url: str) -> str:
             help=f"Select from {len(available_models)} available Ollama models"
         )
         
-        # Show model info
-        if selected_model in recommended_available:
-            st.success(f"🌟 '{selected_model}' is optimized for resume analysis")
-        else:
-            st.warning(f"⚠️ '{selected_model}' may work but isn't specifically tested for resume analysis")
-        
         return selected_model
         
     else:
         # Fallback to static list if Ollama is not available
-        st.error("❌ Could not connect to Ollama server")
-        st.info("💡 Make sure Ollama is running: `ollama serve`")
+        st.error("Could not connect to Ollama server")
+        st.info("Make sure Ollama is running: `ollama serve`")
         
         selected_model = st.selectbox(
             "Model Selection (Fallback)",

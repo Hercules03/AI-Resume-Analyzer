@@ -46,31 +46,30 @@ class ResumeProcessor:
         try:
             # Extract text from the resume
             if development_mode:
-                st.info("📄 **Extracting text from PDF...**")
+                st.info("**Extracting text from PDF...**")
             
             extracted_text = pdf_processor.extract_text_hybrid(pdf_file_path, development_mode)
             
             if not extracted_text or len(extracted_text.strip()) < 100:
-                st.warning("⚠️ Resume text extraction failed or text too short")
+                st.warning("Resume text extraction failed or text too short")
                 return self._create_empty_resume(pdf_file_path)
             
             if development_mode:
-                st.success(f"✅ **Text extracted successfully** ({len(extracted_text)} characters)")
-                with st.expander("📄 Extracted Text Preview"):
+                st.success(f"**Text extracted successfully** ({len(extracted_text)} characters)")
+                with st.expander("Extracted Text Preview"):
                     st.text(extracted_text[:1000] + "..." if len(extracted_text) > 1000 else extracted_text)
             
-            # Process extractors sequentially
+            # Process extractors
             if development_mode:
-                st.info("🔄 **Starting sequential extraction with specialized extractors...**")
-                st.info("💡 **Sequential mode optimized for local Ollama setups**")
+                st.info("**Starting extraction with specialized extractors...**")
             
             results = self._process_sequential(extracted_text, development_mode)
             
             if development_mode:
-                st.success("✅ **Extraction completed!**")
+                st.success("**Extraction completed!**")
                 
                 # Show extraction summary
-                st.subheader("📊 **Extraction Summary**")
+                st.subheader("**Extraction Summary**")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 
                 with col1:
@@ -105,7 +104,7 @@ class ResumeProcessor:
             )
             
             if development_mode:
-                st.success("✅ **Resume object created successfully!**")
+                st.success("**Resume object created successfully!**")
                 st.json({
                     "name": resume.name,
                     "email": resume.email,
@@ -121,10 +120,10 @@ class ResumeProcessor:
             
         except Exception as e:
             if development_mode:
-                st.error(f"❌ **Resume processing failed:** {str(e)}")
+                st.error(f"**Resume processing failed:** {str(e)}")
                 st.exception(e)
             else:
-                st.error("❌ Resume processing failed. Please try again.")
+                st.error("Resume processing failed. Please try again.")
             
             return self._create_empty_resume(pdf_file_path)
     
@@ -152,17 +151,17 @@ class ResumeProcessor:
         for extractor_name, extractor in extractors:
             try:
                 if development_mode:
-                    st.info(f"🔄 Processing {extractor_name.title()} extractor...")
+                    st.info(f"Processing {extractor_name.title()} extractor...")
                 
                 result = extractor.extract(extracted_text, development_mode)
                 results[extractor_name] = result
                 
                 if development_mode:
-                    st.success(f"✅ {extractor_name.title()} extraction completed")
+                    st.success(f"{extractor_name.title()} extraction completed")
                     
             except Exception as e:
                 if development_mode:
-                    st.error(f"❌ {extractor_name.title()} extraction failed: {e}")
+                    st.error(f"{extractor_name.title()} extraction failed: {e}")
                 
                 # Provide fallback empty results
                 if extractor_name == 'profile':

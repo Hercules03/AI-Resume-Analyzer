@@ -1,14 +1,7 @@
 # =============================================================================
-# AI RESUME ANALYZER - STREAMLINED DEPENDENCIES
+# AI RESUME ANALYZER - ESSENTIAL DEPENDENCIES ONLY
 # =============================================================================
 # Enhanced LLM+RAG ATS Resume System using PyMuPDF4LLM + EasyOCR + Ollama + ChromaDB
-# 
-# INSTALLATION GUIDE:
-# 1. pip install -r requirements.txt
-# 2. Install Ollama: https://ollama.ai/download
-# 3. Pull model: ollama pull gemma2:27b
-# 4. Start service: ollama serve
-# =============================================================================
 
 # =============================================================================
 # CORE STREAMLIT APPLICATION DEPENDENCIES
@@ -16,61 +9,43 @@
 
 # Streamlit web framework
 streamlit>=1.28.0
+streamlit-tags>=1.2.8
+streamlit-option-menu
 
 # Data processing and visualization
 pandas>=1.5.0
 numpy>=1.24.0
 plotly>=5.15.0
 
-# Database connectivity  
-PyMySQL>=1.0.2
-
 # Vector Database and Embeddings
 chromadb>=0.4.18
 sentence-transformers>=2.2.2
-faiss-cpu>=1.7.4
 
-# Geographic and location services
+# Geographic services
 geocoder>=1.38.1
-geographiclib>=1.52
 geopy>=2.2.0
 
 # System and utility libraries
 python-dateutil>=2.8.2
 pytz>=2022.2.1
-validators>=0.20.0
 requests>=2.28.1
 urllib3>=1.26.12
 
-# Image processing and UI components
+# Image processing
 Pillow>=9.3.0
-streamlit-tags>=1.2.8
-
-# Security and cryptography
-cryptography>=37.0.4
-pycryptodome>=3.15.0
 
 # =============================================================================
 # NATURAL LANGUAGE PROCESSING
 # =============================================================================
 
-# spaCy for NLP processing
-spacy>=3.4.4
-spacy-legacy>=3.0.12
-spacy-loggers>=1.0.4
-
 # NLTK for text processing
 nltk>=3.8
 
-# Traditional resume parsing
-pyresparser>=1.0.6
-
 # =============================================================================
-# STREAMLINED PDF PROCESSING (PyMuPDF4LLM + EasyOCR ONLY)
+# PDF PROCESSING
 # =============================================================================
 
-# PyMuPDF4LLM for structured markdown extraction (LLM-optimized)
-# This replaces basic PyMuPDF and provides better structured output
+# PyMuPDF4LLM for structured markdown extraction
 pymupdf4llm>=0.0.25
 
 # EasyOCR for optical character recognition
@@ -78,13 +53,9 @@ easyocr>=1.7.0
 
 # Computer Vision support for EasyOCR
 opencv-python>=4.8.0
-numpy>=1.24.3  # Specific version for EasyOCR compatibility
-
-# PDF to image conversion for EasyOCR fallback
-pdf2image>=1.16.0
 
 # =============================================================================
-# LLM AND RAG DEPENDENCIES FOR METADATA EXTRACTION
+# LLM AND RAG DEPENDENCIES
 # =============================================================================
 
 # LangChain framework and Ollama integration
@@ -92,57 +63,15 @@ langchain>=0.1.10
 langchain-ollama>=0.1.0
 langchain-core>=0.1.25
 langchain-community>=0.0.20
-langgraph>=0.1.0
+langgraph>=0.0.30
 
-# Data validation and JSON schema
+# Data validation
 pydantic>=2.6.1
-jsonschema>=4.21.1
-
-# Token counting and text processing
-tiktoken>=0.6.0
-typing-extensions>=4.9.0
 
 # =============================================================================
-# PYTORCH FOR GPU ACCELERATION (CRITICAL FOR RTX 5090)
+# PYTORCH INSTALLATION (MANUAL STEP REQUIRED)
 # =============================================================================
-
-# IMPORTANT INSTALLATION NOTES:
-# 
-# For RTX 5090 and latest NVIDIA GPUs (sm_120+ architecture):
-# The standard PyTorch does NOT support RTX 5090 due to newer CUDA capability.
-# You MUST install PyTorch nightly version for proper GPU support.
+# PyTorch must be installed separately using the nightly CUDA 128 build:
+# pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 #
-# INSTALLATION COMMANDS:
-# 1. Uninstall existing PyTorch:
-#    pip uninstall torch torchvision torchaudio -y
-#
-# 2. Install PyTorch nightly with CUDA 12.8 support:
-#    pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
-#
-# GPU COMPATIBILITY MATRIX:
-# - RTX 5090: CUDA capability sm_120 ✅ (requires nightly build)
-# - RTX 4090: CUDA capability sm_89 ✅ (stable or nightly)  
-# - RTX 3090: CUDA capability sm_86 ✅ (stable or nightly)
-# - RTX 2080: CUDA capability sm_75 ✅ (stable or nightly)
-#
-# VERIFICATION:
-# python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
-#
-# PERFORMANCE EXPECTATIONS:
-# - EasyOCR with RTX 5090: ~3-10x faster than CPU
-# - Processing time: From 30-60s → 3-10s per page
-# - GPU Memory usage: ~2-4 GB for typical resume processing
-#
-# FALLBACK FOR CPU-ONLY SYSTEMS:
-# If you don't have a compatible GPU or prefer stability, uncomment these:
-# torch>=2.0.0
-# torchvision>=0.15.0  
-# torchaudio>=2.0.0
-
-
-# Additional utilities (included for compatibility)
-six>=1.16.0
-toml>=0.10.2
-toolz>=0.12.0
-tenacity>=8.0.1
-tqdm>=4.64.1
+# Note: Do NOT install via requirements.txt - use the command above instead

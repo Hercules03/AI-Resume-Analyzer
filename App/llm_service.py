@@ -31,7 +31,7 @@ class LLMService:
     def _initialize_llm(self):
         """Initialize the Ollama LLM connection."""
         if not LANGCHAIN_AVAILABLE:
-            st.error("❌ LangChain not available. Please install: pip install langchain langchain-ollama")
+            st.error("LangChain not available. Please install: pip install langchain langchain-ollama")
             return False
         
         try:
@@ -48,14 +48,7 @@ class LLMService:
             return True
                 
         except Exception as e:
-            st.error(f"❌ Failed to initialize LLM: {str(e)}")
-            st.info("""
-            **Troubleshooting:**
-            1. Make sure Ollama is running: `ollama serve`
-            2. Pull the model: `ollama pull gemma2:27b`
-            3. Check if the model name is correct
-            4. Verify Ollama is accessible at the configured URL
-            """)
+            st.error(f"Failed to initialize LLM: {str(e)}")
             return False
     
     def _test_connection(self):
@@ -67,22 +60,14 @@ class LLMService:
             # Simple test with minimal prompt
             test_response = self.llm.invoke("Hi")
             if test_response:
-                st.success(f"✅ LLM Connection established: {self.model_name}")
                 self.connection_tested = True
                 return True
             else:
-                st.error("❌ LLM connection test failed - no response")
+                st.error("LLM connection test failed - no response")
                 return False
                 
         except Exception as e:
-            st.error(f"❌ LLM connection test failed: {str(e)}")
-            st.info("""
-            **Troubleshooting for Ollama:**
-            1. Make sure Ollama is running: `ollama serve`
-            2. Check available models: `ollama list`
-            3. Pull the model if needed: `ollama pull gemma2:27b`
-            4. Verify the model name matches what you have installed
-            """)
+            st.error(f"LLM connection test failed: {str(e)}")
             return False
     
     def extract_with_llm(
@@ -108,13 +93,13 @@ class LLMService:
         """
         if not self.llm:
             if development_mode:
-                st.error("❌ LLM not initialized")
+                st.error("LLM not initialized")
             return {model.__name__.lower(): model().model_dump()}
         
         # Test connection if not already done
         if not self._test_connection():
             if development_mode:
-                st.error("❌ LLM connection failed")
+                st.error("LLM connection failed")
             return {model.__name__.lower(): model().model_dump()}
         
         try:
@@ -132,29 +117,25 @@ class LLMService:
             formatted_prompt = prompt.format(**input_data)
             
             if development_mode:
-                with st.expander(f"🔍 LLM Prompt for {model.__name__}"):
+                with st.expander(f"LLM Prompt for {model.__name__}"):
                     st.code(formatted_prompt)
             
-            # Get response from LLM with timeout handling
-            if development_mode:
-                st.info(f"🤖 Requesting {model.__name__} from {self.model_name}...")
             
             response = self.llm.invoke(formatted_prompt)
             
             if development_mode:
-                with st.expander(f"🔍 Raw LLM Response for {model.__name__}"):
+                with st.expander(f"Raw LLM Response for {model.__name__}"):
                     st.code(response)
             
             # Try to parse with Pydantic parser first
             try:
                 parsed_output = parser.parse(response)
                 if development_mode:
-                    st.success(f"✅ Successfully parsed {model.__name__} with Pydantic")
+                    st.success(f"Successfully parsed {model.__name__} with Pydantic")
                 return {model.__name__.lower(): parsed_output.model_dump()}
             except Exception as parse_error:
                 if development_mode:
-                    st.warning(f"⚠️ Pydantic parsing failed for {model.__name__}: {parse_error}")
-                    st.info("🔧 Attempting manual JSON parsing...")
+                    st.warning(f"Pydantic parsing failed for {model.__name__}: {parse_error}")
                 
                 # Fallback to manual JSON parsing
                 cleaned_response = self._clean_json_response(response)
@@ -163,12 +144,12 @@ class LLMService:
                 # Validate with the model
                 validated_output = model(**json_output)
                 if development_mode:
-                    st.success(f"✅ Successfully parsed {model.__name__} with manual JSON parsing")
+                    st.success(f"Successfully parsed {model.__name__} with manual JSON parsing")
                 return {model.__name__.lower(): validated_output.model_dump()}
                 
         except Exception as e:
             if development_mode:
-                st.error(f"❌ LLM extraction failed for {model.__name__}: {str(e)}")
+                st.error(f"LLM extraction failed for {model.__name__}: {str(e)}")
                 st.exception(e)
             return {model.__name__.lower(): model().model_dump()}
     
@@ -189,31 +170,31 @@ class LLMService:
         """
         if not self.llm:
             if development_mode:
-                st.error("❌ LLM not initialized")
+                st.error("LLM not initialized")
             return ""
         
         # Test connection if not already done
         if not self._test_connection():
             if development_mode:
-                st.error("❌ LLM connection failed")
+                st.error("LLM connection failed")
             return ""
         
         try:
             if development_mode:
-                with st.expander("🔍 Simple LLM Prompt"):
+                with st.expander("Simple LLM Prompt"):
                     st.code(prompt)
             
             response = self.llm.invoke(prompt)
             
             if development_mode:
-                with st.expander("🔍 Simple LLM Response"):
+                with st.expander("Simple LLM Response"):
                     st.code(response)
             
             return response
             
         except Exception as e:
             if development_mode:
-                st.error(f"❌ Simple LLM extraction failed: {str(e)}")
+                st.error(f"Simple LLM extraction failed: {str(e)}")
             return ""
     
     def _clean_json_response(self, response: str) -> str:
