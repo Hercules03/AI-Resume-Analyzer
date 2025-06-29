@@ -32,7 +32,7 @@ LLM_CONFIG = {
     'default_model': 'gemma3:12b',
     'default_url': 'http://localhost:11434',
     'temperature': 0.1,
-    'num_predict': 4096,  # Reduced for better performance
+    'num_predict': 8192,  # Reduced for better performance
     'top_k': 10,
     'top_p': 0.9,
     'timeout': 60  # Add timeout for requests
@@ -41,32 +41,122 @@ LLM_CONFIG = {
 # Chatbot Specialists Configuration
 SPECIALISTS_CONFIG = {
     'intent_analysis': {
-        'model': 'gemma3:1b',
+        'model': 'gemma3:4b',
         'url': 'http://localhost:11434',
         'temperature': 0.0,  # Deterministic for consistent intent classification
-        'num_predict': 200,
+        'num_predict': 8192,
         'timeout': 30
     },
     'name_extraction': {
-        'model': 'gemma3:1b',
+        'model': 'gemma3:4b',
         'url': 'http://localhost:11434',
         'temperature': 0.0,  # Deterministic for accurate name extraction
-        'num_predict': 50,
+        'num_predict': 8192,
         'timeout': 30
     },
     'query_enhancement': {
-        'model': 'gemma3:1b',
+        'model': 'gemma3:4b',
         'url': 'http://localhost:11434',
         'temperature': 0.2,  # Slight creativity for query expansion
-        'num_predict': 300,
+        'num_predict': 8192,
         'timeout': 45
     },
     'response_generation': {
         'model': 'gemma3:12b',  # Larger model for better responses
         'url': 'http://localhost:11434',
         'temperature': 0.3,  # More conversational
-        'num_predict': 4096,
+        'num_predict': 8192,
         'timeout': 60
+    }
+}
+
+# Resume Extractors Configuration
+EXTRACTORS_CONFIG = {
+    'profile_extractor': {
+        'model': 'gemma3:4b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.0,  # Deterministic for consistent personal info extraction
+        'num_predict': 8192,
+        'timeout': 45         # ← INCREASED timeout to handle longer processing
+    },
+    'skills_extractor': {
+        'model': 'gemma3:12b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.0,  # Completely deterministic - NO creativity for accurate extraction
+        'num_predict': 8192,
+        'timeout': 60         # ← INCREASED timeout
+    },
+    'education_extractor': {
+        'model': 'gemma3:12b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.0,  # Deterministic for education info
+        'num_predict': 8192,
+        'timeout': 45         # ← INCREASED timeout
+    },
+    'experience_extractor': {
+        'model': 'gemma3:12b',  # Slightly larger for complex work experience parsing
+        'url': 'http://localhost:11434',
+        'temperature': 0.1,
+        'num_predict': 8192,
+        'timeout': 75           # ← INCREASED timeout
+    },
+    'yoe_extractor': {
+        'model': 'gemma3:4b',  # Needs good calculation and reasoning
+        'url': 'http://localhost:11434',
+        'temperature': 0.0,  # Deterministic for calculations
+        'num_predict': 8192,
+        'timeout': 60           # ← INCREASED timeout
+    },
+    
+    # Keep existing configurations for other extractors...
+    'career_transition_extractor': {
+        'model': 'gemma3:12b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.2,
+        'num_predict': 8192,
+        'timeout': 90
+    },
+    'field_relevance_extractor': {
+        'model': 'gemma3:4b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.1,
+        'num_predict': 8192,
+        'timeout': 60
+    },
+    'duration_extractor': {
+        'model': 'gemma3:4b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.0,
+        'num_predict': 8192,
+        'timeout': 30
+    },
+    'career_level_extractor': {
+        'model': 'gemma3:12b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.1,
+        'num_predict': 8192,
+        'timeout': 90
+    },
+    'field_classification_extractor': {
+        'model': 'gemma3:4b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.1,
+        'num_predict': 8192,
+        'timeout': 60
+    },
+    'role_type_extractor': {
+        'model': 'gemma3:4b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.1,
+        'num_predict': 8192,
+        'timeout': 60
+    },
+    'job_role_estimation_extractor': {
+        'model': 'gemma3:12b',
+        'url': 'http://localhost:11434',
+        'temperature': 0.2,
+        'num_predict': 8192,
+        'timeout': 120
     }
 }
 

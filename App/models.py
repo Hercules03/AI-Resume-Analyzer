@@ -78,6 +78,104 @@ class YearsOfExperience(BaseModel):
     primary_field: Optional[str] = None
 
 
+class CareerTransition(BaseModel):
+    """Model for a single career transition."""
+    from_field: str = Field(description="The career field the person transitioned from")
+    to_field: str = Field(description="The career field the person transitioned to")
+    transition_point: Optional[str] = Field(None, description="When the transition occurred (company/timeframe)")
+    transition_type: str = Field(description="Type of transition: 'vertical', 'horizontal', 'pivot', or 'lateral'")
+    skill_overlap: Optional[str] = Field(None, description="Description of transferable skills")
+    rationale: Optional[str] = Field(None, description="Likely reason for the transition")
+
+
+class CareerProgressionAnalysis(BaseModel):
+    """Model for comprehensive career progression analysis."""
+    transitions: List[CareerTransition] = Field(default_factory=list, description="List of detected career transitions")
+    career_path_type: str = Field(description="Overall career path pattern: 'linear', 'zigzag', 'specialized', 'diverse', or 'early_career'")
+    primary_career_field: str = Field(description="The dominant career field based on time spent and progression")
+    career_coherence_score: int = Field(ge=1, le=10, description="How coherent/focused the career path is (1-10)")
+    growth_trajectory: str = Field(description="Career growth pattern: 'ascending', 'lateral', 'mixed', or 'unclear'")
+    field_expertise_areas: List[str] = Field(default_factory=list, description="Areas where the candidate has built expertise")
+    transition_summary: str = Field(description="Human-readable summary of career transitions")
+    strengths_from_transitions: List[str] = Field(default_factory=list, description="Strengths gained from career transitions")
+    potential_concerns: List[str] = Field(default_factory=list, description="Potential concerns from frequent transitions")
+
+
+class FieldRelevanceAnalysis(BaseModel):
+    """Model for field relevance analysis."""
+    is_relevant: bool = Field(description="Whether the experience is relevant to the target field")
+    relevance_score: int = Field(ge=1, le=10, description="Relevance score from 1-10")
+    matching_skills: List[str] = Field(default_factory=list, description="Skills that match the target field")
+    transferable_skills: List[str] = Field(default_factory=list, description="Skills transferable to the target field")
+    relevance_explanation: str = Field(description="Explanation of why experience is or isn't relevant")
+    field_overlap_percentage: int = Field(ge=0, le=100, description="Percentage of overlap with target field")
+
+
+class DurationAnalysis(BaseModel):
+    """Model for duration analysis."""
+    total_months: float = Field(description="Total duration in months")
+    total_years: float = Field(description="Total duration in years (calculated)")
+    original_text: str = Field(description="Original duration text")
+    parsed_components: Dict[str, Any] = Field(default_factory=dict, description="Parsed components (years, months)")
+    confidence_score: int = Field(ge=1, le=10, description="Confidence in parsing accuracy (1-10)")
+    parsing_notes: str = Field(description="Notes about parsing challenges or assumptions")
+    is_current: bool = Field(default=False, description="Whether this is a current/ongoing position")
+    formatted_duration: str = Field(description="Human-readable formatted duration")
+
+
+class CareerLevelAnalysis(BaseModel):
+    """Model for career level analysis."""
+    career_level: str = Field(description="Determined career level")
+    confidence_score: int = Field(ge=1, le=10, description="Confidence in career level assessment (1-10)")
+    field_specific_experience_years: float = Field(description="Years of experience in the target field")
+    total_experience_years: float = Field(description="Total years of work experience")
+    level_indicators: List[str] = Field(default_factory=list, description="Factors that indicate this career level")
+    progression_pattern: str = Field(description="Pattern of career progression")
+    next_level_requirements: List[str] = Field(default_factory=list, description="What's needed to reach next level")
+    field_expertise_depth: str = Field(description="Depth of expertise in the target field")
+    leadership_experience: bool = Field(description="Whether candidate has leadership experience")
+    detailed_explanation: str = Field(description="Detailed explanation of career level determination")
+
+
+class FieldClassificationAnalysis(BaseModel):
+    """Model for field classification analysis."""
+    primary_field: str = Field(description="The primary professional field")
+    confidence_score: int = Field(ge=1, le=10, description="Confidence in field classification (1-10)")
+    field_indicators: List[str] = Field(default_factory=list, description="Evidence supporting this field classification")
+    secondary_fields: List[str] = Field(default_factory=list, description="Secondary or related fields")
+    field_explanation: str = Field(description="Detailed explanation of field determination")
+    skill_alignment_score: int = Field(ge=1, le=10, description="How well skills align with the field (1-10)")
+    experience_alignment_score: int = Field(ge=1, le=10, description="How well experience aligns with the field (1-10)")
+
+
+class RoleTypeAnalysis(BaseModel):
+    """Model for role type analysis."""
+    is_technical: bool = Field(description="Whether the candidate appears to have technical skills/experience")
+    is_creative: bool = Field(description="Whether the candidate appears to have creative skills/experience")
+    is_business: bool = Field(description="Whether the candidate appears to have business skills/experience")
+    is_leadership: bool = Field(description="Whether the candidate appears to have leadership experience")
+    technical_score: int = Field(ge=1, le=10, description="Technical role alignment score (1-10)")
+    creative_score: int = Field(ge=1, le=10, description="Creative role alignment score (1-10)")
+    business_score: int = Field(ge=1, le=10, description="Business role alignment score (1-10)")
+    leadership_score: int = Field(ge=1, le=10, description="Leadership role alignment score (1-10)")
+    primary_role_type: str = Field(description="Primary role type: Technical, Creative, Business, Leadership, or Mixed")
+    role_indicators: Dict[str, List[str]] = Field(default_factory=dict, description="Evidence for each role type")
+    role_explanation: str = Field(description="Detailed explanation of role type determination")
+
+
+class JobRoleEstimation(BaseModel):
+    """Model for job role estimation analysis."""
+    primary_job_role: str = Field(description="Primary recommended job role")
+    alternative_roles: List[str] = Field(default_factory=list, description="Alternative job roles that could fit")
+    role_confidence_score: int = Field(ge=1, le=10, description="Confidence in primary role recommendation (1-10)")
+    role_justification: str = Field(description="Detailed justification for the recommended role")
+    required_skills_match: List[str] = Field(default_factory=list, description="Skills that match the recommended role")
+    skill_gaps: List[str] = Field(default_factory=list, description="Skills that could enhance role suitability")
+    career_progression_path: List[str] = Field(default_factory=list, description="Potential career progression from this role")
+    salary_range_estimate: str = Field(description="Estimated salary range for the role")
+    role_suitability_factors: Dict[str, int] = Field(default_factory=dict, description="Factors affecting role suitability (1-10 scores)")
+
+
 class Resume(BaseModel):
     """A complete resume with all extracted information."""
     # Profile information
@@ -241,16 +339,90 @@ class Resume(BaseModel):
         return gaps
     
     def _appears_technical(self) -> bool:
-        """Check if this appears to be a technical role based on skills."""
-        technical_keywords = ['python', 'java', 'javascript', 'sql', 'aws', 'docker', 'react', 'api', 'database', 'programming', 'software', 'developer', 'engineer']
-        skills_text = ' '.join(self.skills).lower()
-        return any(keyword in skills_text for keyword in technical_keywords)
+        """Check if this appears to be a technical role using LLM-based analysis."""
+        try:
+            from extractors import RoleTypeExtractor
+            
+            if not self.skills:
+                return False
+            
+            # Convert work experiences to the format expected by extractor
+            work_exp_data = []
+            if self.work_experiences:
+                for exp in self.work_experiences:
+                    exp_dict = {
+                        'job_title': exp.job_title,
+                        'company': exp.company,
+                        'responsibilities': exp.responsibilities or [],
+                        'technologies': exp.technologies or []
+                    }
+                    work_exp_data.append(exp_dict)
+            
+            # Convert educations to the format expected by extractor
+            edu_data = []
+            if self.educations:
+                for edu in self.educations:
+                    edu_dict = {
+                        'degree': edu.degree,
+                        'field_of_study': edu.field_of_study,
+                        'institution': edu.institution
+                    }
+                    edu_data.append(edu_dict)
+            
+            # Use LLM-based role type extractor
+            role_extractor = RoleTypeExtractor()
+            result = role_extractor.analyze_role_type(self.skills, work_exp_data, edu_data, development_mode=False)
+            
+            analysis = result.get('roletypeanalysis', {})
+            return analysis.get('is_technical', False)
+            
+        except Exception as e:
+            # Fallback to keyword matching if LLM extractor fails
+            print(f"Role type extraction failed: {e}")
+            return RoleTypeExtractor.appears_technical_fallback(self.skills)
     
     def _appears_creative(self) -> bool:
-        """Check if this appears to be a creative role based on skills."""
-        creative_keywords = ['design', 'photoshop', 'illustrator', 'figma', 'ui', 'ux', 'graphic', 'creative', 'adobe', 'sketch', 'portfolio']
-        skills_text = ' '.join(self.skills).lower()
-        return any(keyword in skills_text for keyword in creative_keywords)
+        """Check if this appears to be a creative role using LLM-based analysis."""
+        try:
+            from extractors import RoleTypeExtractor
+            
+            if not self.skills:
+                return False
+            
+            # Convert work experiences to the format expected by extractor
+            work_exp_data = []
+            if self.work_experiences:
+                for exp in self.work_experiences:
+                    exp_dict = {
+                        'job_title': exp.job_title,
+                        'company': exp.company,
+                        'responsibilities': exp.responsibilities or [],
+                        'technologies': exp.technologies or []
+                    }
+                    work_exp_data.append(exp_dict)
+            
+            # Convert educations to the format expected by extractor
+            edu_data = []
+            if self.educations:
+                for edu in self.educations:
+                    edu_dict = {
+                        'degree': edu.degree,
+                        'field_of_study': edu.field_of_study,
+                        'institution': edu.institution
+                    }
+                    edu_data.append(edu_dict)
+            
+            # Use LLM-based role type extractor
+            role_extractor = RoleTypeExtractor()
+            result = role_extractor.analyze_role_type(self.skills, work_exp_data, edu_data, development_mode=False)
+            
+            analysis = result.get('roletypeanalysis', {})
+            return analysis.get('is_creative', False)
+            
+        except Exception as e:
+            # Fallback to keyword matching if LLM extractor fails
+            print(f"Role type extraction failed: {e}")
+            return RoleTypeExtractor.appears_creative_fallback(self.skills)
     
     def get_completeness_summary(self) -> Dict[str, Any]:
         """Get a summary of resume completeness for HR dashboard."""
