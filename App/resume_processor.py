@@ -49,44 +49,13 @@ class ResumeProcessor:
                 st.info("**Extracting text from PDF...**")
             
             extracted_text = pdf_processor.extract_text_hybrid(pdf_file_path, development_mode)
-
-
             
             if not extracted_text or len(extracted_text.strip()) < 100:
                 st.warning("Resume text extraction failed or text too short")
                 return self._create_empty_resume(pdf_file_path)
             
-            # Process the extracted text
-            return self.process_resume_from_text(extracted_text, pdf_file_path, development_mode)
-            
-        except Exception as e:
             if development_mode:
-                st.error(f"**Resume processing failed:** {str(e)}")
-                st.exception(e)
-            else:
-                st.error("Resume processing failed. Please try again.")
-            
-            return self._create_empty_resume(pdf_file_path)
-
-    def process_resume_from_text(self, extracted_text: str, pdf_file_path: str, development_mode: bool = False) -> Resume:
-        """
-        Process a resume from already extracted text using sequential extraction.
-        
-        Args:
-            extracted_text: The extracted resume text
-            pdf_file_path: Path to the PDF resume file (for metadata)
-            development_mode: Whether to show detailed extraction process
-            
-        Returns:
-            Resume object with all extracted information
-        """
-        try:
-            if not extracted_text or len(extracted_text.strip()) < 100:
-                st.warning("Resume text too short or empty")
-                return self._create_empty_resume(pdf_file_path)
-            
-            if development_mode:
-                st.success(f"**Text received successfully** ({len(extracted_text)} characters)")
+                st.success(f"**Text extracted successfully** ({len(extracted_text)} characters)")
                 with st.expander("Extracted Text Preview"):
                     st.text(extracted_text[:1000] + "..." if len(extracted_text) > 1000 else extracted_text)
             
@@ -144,13 +113,14 @@ class ResumeProcessor:
                     "education_count": len(resume.educations),
                     "experience_count": len(resume.work_experiences),
                     "years_of_experience": resume.YoE,
+                    "resume_score": resume.resume_score
                 })
             
             return resume
             
         except Exception as e:
             if development_mode:
-                st.error(f"**Resume processing from text failed:** {str(e)}")
+                st.error(f"**Resume processing failed:** {str(e)}")
                 st.exception(e)
             else:
                 st.error("Resume processing failed. Please try again.")
@@ -218,6 +188,7 @@ class ResumeProcessor:
             work_experiences=[],
             YoE=None,
             file_path=pdf_file_path,
+            resume_score=0
         )
     
     def get_extraction_capabilities(self) -> Dict[str, str]:

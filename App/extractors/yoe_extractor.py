@@ -1,52 +1,47 @@
 """
-Years of experience extractor for career analysis.
+Simple YoeExtractor using LLM for years of experience calculation.
 """
 from typing import Type, Dict, Any
 from .base_extractor import BaseExtractor
-from models import YearsOfExperience
+from pydantic import BaseModel, Field
+
+
+class YearsOfExperience(BaseModel):
+    """Model for years of experience analysis."""
+    total_years: float = Field(description="Total years of professional experience")
+    relevant_years: float = Field(description="Years of relevant experience in primary field")
+    reasoning: str = Field(description="Brief explanation of calculation")
 
 
 class YoeExtractor(BaseExtractor):
-    """Extractor for years of experience and career level."""
+    """Simple extractor for years of experience calculation using LLM."""
     
     def get_model(self) -> Type[YearsOfExperience]:
-        """Get the Pydantic model for YoE extraction."""
+        """Get the Pydantic model."""
         return YearsOfExperience
     
     def get_prompt_template(self) -> str:
-        """Get the prompt template for YoE extraction."""
+        """Get the prompt template."""
         return """
-You are an assistant that analyzes work experience to determine total years of experience and career level.
+Calculate the total years of professional experience from the work history.
 
-Based on the resume text provided, calculate:
+INSTRUCTIONS:
+1. Add up all professional work experience durations
+2. Calculate relevant experience in the primary field
+3. Provide reasoning for the calculations
 
-1. Total Years of Experience: Calculate the total number of years of professional work experience
-   - Add up all work experience durations
-   - Convert months to years (e.g., 30 months = 2.5 years)
-   - Include full-time, part-time, and contract positions
-   - Exclude internships unless they are the only experience
+Consider:
+- Full-time, part-time, contract positions
+- Internships (count as partial experience)
+- Overlapping periods (don't double count)
+- Career gaps or breaks
 
-2. Career Level: Determine the career level based on experience and job titles
-   - "Entry Level": 0-2 years of experience, junior positions
-   - "Mid Level": 2-5 years of experience, regular positions
-   - "Senior Level": 5-10 years of experience, senior positions, team lead roles
-   - "Executive Level": 10+ years of experience, management, director, VP roles
-
-3. Primary Field: Determine the primary field of expertise based on job titles and experience
-   - Examples: "Software Engineering", "Data Science", "Product Management", "Sales", etc.
-
-Analyze the entire resume text to make these determinations.
-
-Return your output as a JSON object with the schema provided below.
+Work Experience:
+{text}
 
 {format_instructions}
-
-Resume Text:
-{text}
 """
     
     def process_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
-        """Process the YoE extraction output."""
-        # The output should contain 'yearsofexperience' key with the YoE data
-        yoe_data = output.get('yearsofexperience', {})
-        return {'yoe': yoe_data} 
+        """Process the output."""
+        return {'YoE': output} 

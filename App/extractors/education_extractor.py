@@ -1,50 +1,44 @@
 """
-Education extractor for academic background.
+Simple EducationExtractor using LLM for education information extraction.
 """
-from typing import Type, Dict, Any, List
+from typing import Type, Dict, Any
 from .base_extractor import BaseExtractor
 from models import Education
-from pydantic import BaseModel, Field
-
-
-class EducationList(BaseModel):
-    """Model for list of education entries."""
-    educations: List[Education] = Field(default_factory=list)
 
 
 class EducationExtractor(BaseExtractor):
-    """Extractor for education information."""
+    """Simple extractor for education information using LLM."""
     
-    def get_model(self) -> Type[EducationList]:
-        """Get the Pydantic model for education extraction."""
-        return EducationList
+    def get_model(self) -> Type[Education]:
+        """Get the Pydantic model."""
+        return Education
     
     def get_prompt_template(self) -> str:
-        """Get the prompt template for education extraction."""
+        """Get the prompt template."""
         return """
-You are an assistant that extracts education information from resume text.
-Focus on the Education section and extract all educational qualifications.
+Extract all education information from the following resume text.
 
-For each education entry, extract:
-- Degree type (Bachelor's, Master's, PhD, Certificate, Diploma, etc.)
-- Field of study/Major (Computer Science, Engineering, Business, etc.)
-- Institution name (University, College, School name)
-- Location (City, State, Country)
-- Graduation date (Month/Year or Year)
-- GPA/Grade (if mentioned)
-- Honors/Distinctions (cum laude, dean's list, etc.)
-- Relevant coursework (list of relevant courses)
-- Thesis/Project title (if mentioned)
+INSTRUCTIONS:
+1. Extract ONLY education information that is explicitly mentioned
+2. Do NOT make up or infer any information
+3. Use null for any field not found
+4. Include all degrees, certifications, and courses
 
-Return your output as a JSON object with the schema provided below.
-Include all education entries found in the resume.
-
-{format_instructions}
+Look for:
+- Degree (Bachelor's, Master's, PhD, etc.)
+- Field of study/Major
+- Institution/University name
+- Graduation year or dates
+- GPA (if mentioned)
+- Location
+- Any relevant coursework or achievements
 
 Resume Text:
 {text}
+
+{format_instructions}
 """
     
     def process_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
-        """Process the education extraction output."""
-        return output 
+        """Process the output."""
+        return {'educations': output if isinstance(output, list) else [output]} 
