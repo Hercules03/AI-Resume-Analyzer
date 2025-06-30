@@ -99,43 +99,6 @@ class CandidateSearchChatbot:
         intent = state.get("user_intent", "general")
         return "search" if intent in ["search", "info"] else "general"
     
-    def _filter_results_by_name(self, search_results: List[Dict[str, Any]], target_name: str) -> List[Dict[str, Any]]:
-        """Filter search results to only include candidates with matching names"""
-        
-        if not target_name or not search_results:
-            return search_results
-        
-        target_name_lower = target_name.lower().strip()
-        target_parts = target_name_lower.split()
-        
-        filtered_results = []
-        
-        for result in search_results:
-            metadata = result.get('metadata', {})
-            candidate_name = metadata.get('name', '').lower().strip()
-            
-            if not candidate_name:
-                continue
-            
-            candidate_parts = candidate_name.split()
-            
-            # Check for exact match
-            if candidate_name == target_name_lower:
-                filtered_results.append(result)
-                continue
-            
-            # Check if all target name parts are in candidate name
-            if all(part in candidate_parts for part in target_parts):
-                filtered_results.append(result)
-                continue
-            
-            # Check for partial matches (useful for different name formats)
-            matches = sum(1 for part in target_parts if any(part in candidate_part for candidate_part in candidate_parts))
-            if matches >= len(target_parts) * 0.7:  # 70% match threshold
-                filtered_results.append(result)
-        
-        return filtered_results
-    
     def _search_candidates(self, state: ChatState) -> Dict[str, Any]:
         """Search for candidates using ChromaDB semantic search"""
         
@@ -146,34 +109,22 @@ class CandidateSearchChatbot:
             return {"search_results": [], "context": "No search query provided."}
         
         try:
-            # For info requests, search more specifically for named candidates
+            # For info requests, search more broadly to find specific candidates
             if user_intent == "info":
                 # Extract potential names from the query using name extraction specialist
                 candidate_name = self.name_extraction_specialist.execute(query=search_query)
                 
                 if candidate_name:
-                    # Search specifically for this candidate
-                    search_results = db_manager.semantic_search_resumes(candidate_name, n_results=50)
-                    
-                    # Filter results to only include candidates with matching names
-                    filtered_results = self._filter_results_by_name(search_results, candidate_name)
-                    
-                    # If we found specific matches, use only those
-                    if filtered_results:
-                        search_results = filtered_results
-                    else:
-                        # If no exact matches, try a broader search but still limit results
-                        search_results = search_results[:5]
+                    search_results = db_manager.semantic_search_resumes(candidate_name, n_results=20)
                 else:
-                    # No specific name found, do a general search
-                    search_results = db_manager.semantic_search_resumes(search_query, n_results=10)
+                    search_results = db_manager.semantic_search_resumes(search_query, n_results=20)
             else:
                 # Enhance the search query for better matching using query enhancement specialist
                 enhanced_query = self.query_enhancement_specialist.execute(query=search_query)
                 search_results = db_manager.semantic_search_resumes(enhanced_query, n_results=10)
             
             # Create context from search results
-            context = self._create_context_from_results(search_results, user_intent, candidate_name if user_intent == "info" else None)
+            context = self._create_context_from_results(search_results, user_intent)
             
             return {
                 "search_results": search_results,
@@ -186,218 +137,67 @@ class CandidateSearchChatbot:
                 "search_results": [],
                 "context": "Search failed due to technical error."
             }
-        
-    def _is_target_candidate(self, candidate_name: str, target_name: str) -> bool:
-        """Check if the candidate name matches the target name"""
-        
-        if not candidate_name or not target_name:
-            return False
-        
-        candidate_lower = candidate_name.lower().strip()
-        target_lower = target_name.lower().strip()
-        
-        # Exact match
-        if candidate_lower == target_lower:
-            return True
-        
-        # Check if all target name parts are in candidate name
-        target_parts = target_lower.split()
-        candidate_parts = candidate_lower.split()
-        
-        # All target parts should be present in candidate name
-        return all(any(target_part in candidate_part for candidate_part in candidate_parts) 
-                for target_part in target_parts)
     
-    def _extract_education_info(self, metadata: Dict[str, Any]) -> str:
-        """Extract education information from metadata, checking multiple sources"""
-        
-        # First, check the educations field
-        educations = metadata.get('educations', '')
-        if educations and educations not in ['', 'Not extracted', 'No education details available']:
-            return educations
-        
-        # If educations field is empty or not useful, check extracted_text for education tags
-        extracted_text = metadata.get('extracted_text', '')
-        if extracted_text and 'EDUCATION' in extracted_text.upper():
-            # Look for education sections in the tagged extracted text
-            education_sections = []
-            sections = extracted_text.split('||')
-            
-            for section in sections:
-                if 'EDUCATION' in section.upper():
-                    # Clean up the section and extract meaningful information
-                    clean_section = section.strip()
-                    # Remove section tags and format nicely
-                    if '[SECTION:EDUCATION' in clean_section:
-                        clean_section = clean_section.split(']', 1)[-1].strip()
-                    
-                    # Replace tag markers with readable text
-                    clean_section = clean_section.replace('[DEGREE]', 'Degree:')
-                    clean_section = clean_section.replace('[FIELD_OF_STUDY]', 'Field:')
-                    clean_section = clean_section.replace('[INSTITUTION]', 'Institution:')
-                    clean_section = clean_section.replace('[GRADUATION]', 'Graduated:')
-                    clean_section = clean_section.replace('[GPA]', 'GPA:')
-                    clean_section = clean_section.replace('|', ',')
-                    
-                    if clean_section:
-                        education_sections.append(clean_section)
-            
-            if education_sections:
-                return '\n'.join(f"• {section}" for section in education_sections)
-        
-        # Check full_resume_data for education information
-        full_resume = metadata.get('full_resume_data', '')
-        if full_resume and ('education' in full_resume.lower() or 'degree' in full_resume.lower()):
-            # Extract lines that might contain education information
-            lines = full_resume.split(';')
-            education_lines = [line.strip() for line in lines 
-                             if any(edu_word in line.lower() for edu_word in ['education', 'degree', 'university', 'college', 'bachelor', 'master', 'phd'])]
-            if education_lines:
-                return '; '.join(education_lines)
-        
-        return 'No detailed education information available in database'
-    
-    def _format_skills(self, skills_data: str) -> str:
-        """Format skills data for professional display"""
-        if not skills_data or skills_data in ['Not specified', 'Not extracted', '']:
-            return 'No skills information available'
-        
-        try:
-            # Try to parse as a list if it's a string representation of a list
-            if skills_data.startswith('[') and skills_data.endswith(']'):
-                import ast
-                skills_list = ast.literal_eval(skills_data)
-                if isinstance(skills_list, list) and skills_list:
-                    return ', '.join(skills_list)
-            
-            # Otherwise, return as is but formatted
-            return skills_data.replace('[', '').replace(']', '').replace("'", '')
-        except:
-            return skills_data
-    
-    def _format_skills_summary(self, skills_data: str) -> str:
-        """Format skills data for summary display (truncated)"""
-        formatted_skills = self._format_skills(skills_data)
-        if len(formatted_skills) > 80:
-            return formatted_skills[:80] + "..."
-        return formatted_skills
-    
-    def _format_work_experience(self, work_exp: str) -> str:
-        """Format work experience for professional display"""
-        if not work_exp or work_exp in ['No work experience details available', 'Not extracted', '']:
-            return 'No work experience information available'
-        
-        # Split by semicolon and format each job
-        jobs = work_exp.split(';')
-        formatted_jobs = []
-        
-        for i, job in enumerate(jobs[:3], 1):  # Show max 3 jobs
-            job = job.strip()
-            if job:
-                formatted_jobs.append(f"• {job}")
-        
-        if len(jobs) > 3:
-            formatted_jobs.append(f"• ... and {len(jobs) - 3} more positions")
-        
-        return '\n'.join(formatted_jobs) if formatted_jobs else 'No work experience information available'
-    
-    def _create_context_from_results(self, search_results: List[Dict[str, Any]], intent: str = "search", specific_candidate: str = None) -> str:
+    def _create_context_from_results(self, search_results: List[Dict[str, Any]], intent: str = "search") -> str:
         """Create context string from search results for the LLM with detailed CV content"""
         
         if not search_results:
-            if specific_candidate:
-                return f"No information found for candidate '{specific_candidate}' in the database."
             return "No candidates found matching the search criteria."
         
         context_parts = []
         
-        # For info requests about a specific candidate, only show that candidate
-        if intent == "info" and specific_candidate:
-            # Only show the specific candidate's information
-            candidate_shown = False
-            
-            for result in search_results:
+        # For info requests, provide comprehensive detailed information
+        if intent == "info":
+            for i, result in enumerate(search_results[:3], 1):  # Top 3 for info requests
                 metadata = result.get('metadata', {})
-                candidate_name = metadata.get('name', '').strip()
-                
-                # Check if this is the candidate we're looking for
-                if self._is_target_candidate(candidate_name, specific_candidate):
-                    candidate_info = f"""
-**{candidate_name}**
-
-**Contact Information:**
-• Email: {metadata.get('email', 'Not provided')}
-• Phone: {metadata.get('contact_info', 'Not provided')}
-• Location: {metadata.get('city', '')}, {metadata.get('state', '')}, {metadata.get('country', '')}
-
-**Professional Profile:**
-• Field: {metadata.get('reco_field', 'General')}
-• Experience Level: {metadata.get('cand_level', 'Unknown')}
-• Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
-
-**Skills & Expertise:**
-{self._format_skills(metadata.get('skills', 'Not specified'))}
-
-**Work Experience:**
-{self._format_work_experience(metadata.get('work_experiences', 'No work experience details available'))}
-
-**Education Background:**
-{self._extract_education_info(metadata)}
-                    """
-                    context_parts.append(candidate_info.strip())
-                    candidate_shown = True
-                    break  # Only show the first match for the specific candidate
-            
-            if not candidate_shown:
-                return f"Could not find specific information for candidate '{specific_candidate}' in the database. The search returned {len(search_results)} results, but none matched the requested candidate name exactly."
-                
-        elif intent == "info":
-            # General info request without specific candidate - show top 3
-            for i, result in enumerate(search_results[:3], 1):
-                metadata = result.get('metadata', {})
+                similarity = round(result.get('similarity_score', 0) * 100, 1)
                 
                 candidate_info = f"""
-**{metadata.get('name', 'Unknown')}**
-
-**Contact Information:**
-• Email: {metadata.get('email', 'Not provided')}
-• Location: {metadata.get('city', '')}, {metadata.get('state', '')}, {metadata.get('country', '')}
-
-**Professional Profile:**
-• Field: {metadata.get('reco_field', 'General')}
-• Experience Level: {metadata.get('cand_level', 'Unknown')}
-• Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
-
-**Skills & Expertise:**
-{self._format_skills(metadata.get('skills', 'Not specified'))}
-
-**Work Experience:**
-{self._format_work_experience(metadata.get('work_experiences', 'No work experience details available'))}
-
-**Education Background:**
-{self._extract_education_info(metadata)}
+                Candidate {i}: {metadata.get('name', 'Unknown')}
+                - Email: {metadata.get('email', 'Not provided')}
+                - Field: {metadata.get('reco_field', 'General')}
+                - Experience Level: {metadata.get('cand_level', 'Unknown')}
+                - Location: {metadata.get('city', '')}, {metadata.get('state', '')}, {metadata.get('country', '')}
+                - Skills: {metadata.get('skills', 'Not specified')}
+                - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
+                - Resume File: {metadata.get('pdf_name', 'Unknown')}
+                - Match Score: {similarity}%
+                
+                DETAILED WORK EXPERIENCE:
+                {metadata.get('work_experiences', 'No work experience details available')}
+                
+                EDUCATION BACKGROUND:
+                {metadata.get('educations', 'No education details available')}
+                
+                ADDITIONAL PROFILE DATA:
+                {metadata.get('full_resume_data', 'No additional data available')}
+                
+                CONTACT & PROFILE LINKS:
+                {metadata.get('contact_info', 'No contact information available')}
                 """
                 context_parts.append(candidate_info.strip())
         else:
             # For search requests, provide summary information with key details
-            for i, result in enumerate(search_results[:5], 1):
+            for i, result in enumerate(search_results[:5], 1):  # Top 5 for searches
                 metadata = result.get('metadata', {})
+                similarity = round(result.get('similarity_score', 0) * 100, 1)
                 
                 # Extract first job for quick reference
                 work_exp = metadata.get('work_experiences', '')
                 first_job = "No work experience"
                 if work_exp and work_exp != '':
-                    first_job = work_exp.split(';')[0] if ';' in work_exp else work_exp[:100] + "..."
+                    first_job = work_exp.split(';')[0] if ';' in work_exp else work_exp[:150] + "..."
                 
                 candidate_info = f"""
-**{metadata.get('name', 'Unknown')}**
-• Email: {metadata.get('email', 'Not provided')}
-• Field: {metadata.get('reco_field', 'General')}
-• Experience Level: {metadata.get('cand_level', 'Unknown')}
-• Location: {metadata.get('city', '')}, {metadata.get('state', '')}
-• Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
-• Recent Position: {first_job}
-• Key Skills: {self._format_skills_summary(metadata.get('skills', 'Not specified'))}
+                Candidate {i}: {metadata.get('name', 'Unknown')}
+                - Email: {metadata.get('email', 'Not provided')}
+                - Field: {metadata.get('reco_field', 'General')}
+                - Experience Level: {metadata.get('cand_level', 'Unknown')}
+                - Location: {metadata.get('city', '')}, {metadata.get('state', '')}
+                - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
+                - Recent/First Job: {first_job}
+                - Key Skills: {str(metadata.get('skills', 'Not specified'))[:100]}...
+                - Similarity Score: {similarity}%
                 """
                 context_parts.append(candidate_info.strip())
         
