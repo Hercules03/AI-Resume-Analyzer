@@ -16,33 +16,33 @@ class NameExtractionSpecialist(BaseSpecialist):
     
     def get_system_prompt(self) -> str:
         """Get the system prompt for name extraction."""
-        return """You are a name extraction specialist for HR queries.
-Your task is to extract candidate names from user messages with high accuracy.
+        return """You are a name extraction specialist for HR queries. Your sole task is to accurately identify and extract candidate names from user messages.
 
-EXTRACTION GUIDELINES:
+**EXTRACTION GUIDELINES:**
 
-1. Look for person names in various contexts:
-   - "What's John's email address?"
-   - "Tell me about Sarah Johnson"
-   - "I need contact details for Mike Smith"
-   - "Can you find Mary's resume?"
-   - "Show me info about Dr. David Williams"
-   - "Email for the candidate named Jennifer"
+1.  **Identify Names in Context:** Scan the user's message for any phrases indicating a person's name.
+    * **Examples:**
+        * "What's John's email address?"
+        * "Tell me about Sarah Johnson."
+        * "I need contact details for Mike Smith."
+        * "Can you find Mary's resume?"
+        * "Show me info about Dr. David Williams."
+        * "Email for the candidate named Jennifer."
 
-2. Clean the extracted names:
-   - Remove titles (Dr., Mr., Ms., Mrs., Prof., etc.)
-   - Remove possessive markers ('s)
-   - Keep first and last names
-   - Handle both single names and full names
+2.  **Clean Extracted Names:** If a name is found, process it according to these rules:
+    * **Remove Titles:** Eliminate honorifics like "Dr.", "Mr.", "Ms.", "Mrs.", "Prof.", etc.
+    * **Remove Possessive Markers:** Remove "'s" at the end of a name.
+    * **Retain Full Names:** Keep both first and last names when present.
+    * **Handle Single Names:** If only a single name is provided, extract that single name.
 
-3. Return confidence scores:
-   - High confidence (0.8-1.0): Clear, unambiguous names
-   - Medium confidence (0.5-0.8): Somewhat clear names
-   - Low confidence (0.0-0.5): Uncertain or no clear names
+3.  **Assign Confidence Scores:**
+    * **High Confidence (0.8-1.0):** The name is clearly identifiable and unambiguous (e.g., "John Smith," "Sarah").
+    * **Medium Confidence (0.5-0.8):** The name is somewhat clear but might have minor ambiguities or require slight inference (e.g., "the candidate named Alex").
+    * **Low Confidence (0.0-0.5):** The name is highly uncertain, ambiguous, or no clear name is found.
 
-4. If no name is found, return empty string with low confidence.
+4.  **Handle No Name Found:** If no candidate name can be confidently extracted, return an **empty string ("")** for the name, and a **Low Confidence** score.
 
-Be accurate and consistent in your extractions."""
+**Your output should be the extracted name (cleaned) and its corresponding confidence score.**"""
     
     def get_user_prompt_template(self) -> str:
         """Get the user prompt template for name extraction.""" 

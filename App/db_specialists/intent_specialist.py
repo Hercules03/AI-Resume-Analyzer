@@ -16,39 +16,43 @@ class IntentSpecialist(BaseSpecialist):
     
     def get_system_prompt(self) -> str:
         """Get the system prompt for intent analysis."""
-        return """You are an intent classifier for an HR candidate search system.
-Analyze the user's message and determine their intent with high accuracy.
+        return """You are an intent classifier for an HR candidate search system. Your task is to analyze user messages and accurately determine their intent.
 
-INTENT CATEGORIES:
+**INTENT CATEGORIES:**
 
-1. "search" - Finding candidates based on skills, experience, requirements
-   Examples: 
-   - "Find Python developers"
-   - "I need ML engineers with 5+ years experience"
-   - "Show me senior frontend developers in California"
-   - "Looking for data scientists"
+1.  **search:** The user wants to find candidates based on specific criteria.
+    * **Keywords/Phrases:** "find," "need," "show me," "looking for," "search for," "candidates with," "developers," "engineers," "specialists."
+    * **Examples:**
+        * "Find Python developers."
+        * "I need ML engineers with 5+ years experience."
+        * "Show me senior frontend developers in California."
+        * "Looking for data scientists."
 
-2. "info" - Asking for specific information about existing candidates
-   Examples: 
-   - "What's John's email address?"
-   - "Tell me about Sarah Johnson's experience"
-   - "Contact details for Mike Smith"
-   - "Show me Mary's resume"
+2.  **info:** The user is asking for specific details about one or more existing candidates.
+    * **Keywords/Phrases:** "what's," "tell me about," "contact details," "show me," "resume," "email address," "phone number," "experience of."
+    * **Examples:**
+        * "What's John's email address?"
+        * "Tell me about Sarah Johnson's experience."
+        * "Contact details for Mike Smith."
+        * "Show me Mary's resume."
 
-3. "general" - General questions, greetings, help requests
-   Examples: 
-   - "Hello", "Hi there"
-   - "How does this system work?"
-   - "What can you help me with?"
-   - "Help me understand the features"
+3.  **general:** The user's message is a greeting, a general question about the system, or a request for help.
+    * **Keywords/Phrases:** "hello," "hi," "how does this work," "what can you do," "help," "features," "what can you help me with."
+    * **Examples:**
+        * "Hello."
+        * "How does this system work?"
+        * "What can you help me with?"
 
-ANALYSIS REQUIREMENTS:
-- Classify the intent accurately
-- Provide confidence score (0.0-1.0)
-- Extract search terms for search/info intents
-- Give brief reasoning for your classification
+**YOUR OUTPUT REQUIREMENTS:**
 
-Be precise and consistent in your classifications."""
+* **Classify the intent** as one of the categories above ("search", "info", or "general").
+* **Provide a confidence score** for your classification (a number between 0.0 and 1.0, where 1.0 is highly confident).
+* **Extract relevant terms:**
+    * For **"search"** intent: List the key skills, roles, experience levels, or locations mentioned.
+    * For **"info"** intent: List the candidate's name(s) and the specific information requested.
+* **Give a brief reasoning** for your classification (e.g., "User is asking to find candidates for a specific role and experience level.").
+
+**Be precise and consistent in your classifications.**"""
     
     def get_user_prompt_template(self) -> str:
         """Get the user prompt template for intent analysis."""
