@@ -23,27 +23,28 @@ class ExperienceExtractor(BaseExtractor):
         """Get the prompt template for experience extraction."""
         return """
 You are an assistant that extracts work experience information from resume text.
-Focus on the Experience, Work History, or Professional Experience sections.
+Focus on the Experience, Work History, Professional Experience, or relevant sections like "Volunteer Experience" or "Internships."
 
 For each work experience entry, extract:
-- Job title/Position (Software Engineer, Manager, Analyst, etc.)
-- Company name
-- Location (City, State, Country)
-- Start date (Month/Year format)
-- End date (Month/Year or "Present")
-- Duration (e.g., "2 years 3 months")
-- Key responsibilities and achievements (list of bullet points)
-- Technologies used (programming languages, tools, frameworks)
-- Industry sector (Technology, Finance, Healthcare, etc.)
-- Employment type (Full-time, Part-time, Contract, Internship, etc.)
+- **Job Title/Position:** (e.g., Marketing Manager, Registered Nurse, Sales Associate, Project Coordinator, Executive Assistant, etc.)
+- **Company/Organization Name:** (e.g., ABC Corporation, St. Jude's Hospital, City of [City Name], Self-Employed)
+- **Location:** (City, State/Province, Country - if available)
+- **Start Date:** (Month/Year format, e.g., "January 2020")
+- **End Date:** (Month/Year format, or "Present" if current)
+- **Duration:** (e.g., "2 years 3 months," "6 months," calculated from start and end dates)
+- **Key Responsibilities and Achievements:** (List of bullet points detailing duties, accomplishments, and quantifiable results. Prioritize achievements with metrics where present.)
+- **Relevant Tools/Software/Equipment Used:** (Specific to the role, e.g., CRM software, medical equipment, design tools, financial platforms, manufacturing machinery, etc.)
+- **Industry Sector:** (e.g., Retail, Healthcare, Finance, Education, Hospitality, Manufacturing, Non-Profit, Government, etc.)
+- **Employment Type:** (e.g., Full-time, Part-time, Contract, Internship, Volunteer, Freelance)
+
+```Resume Text
+{text}
+```
 
 Return your output as a JSON object with the schema provided below.
 Include all work experience entries found in the resume.
 
 {format_instructions}
-
-Resume Text:
-{text}
 """
     
     def process_output(self, output: Dict[str, Any]) -> Dict[str, Any]:

@@ -1,5 +1,9 @@
 """
 Resume processor using specialized extractors for sequential processing.
+
+Key optimizations:
+- Profile and Education extractors use only first page text for better focus and efficiency
+- Skills, Experience, and YoE extractors use full document text for comprehensive analysis
 """
 from typing import Dict, Any
 import streamlit as st
@@ -54,16 +58,24 @@ class ResumeProcessor:
                 st.warning("Resume text extraction failed or text too short")
                 return self._create_empty_resume(pdf_file_path)
             
+            # Extract first page text for profile extraction (more efficient and focused)
+            first_page_text = pdf_processor.extract_first_page_with_pymupdf4llm(pdf_file_path)
+            
             if development_mode:
                 st.success(f"**Text extracted successfully** ({len(extracted_text)} characters)")
+                if first_page_text:
+                    st.info(f"**First page text extracted** ({len(first_page_text)} characters) - for profile and education extraction")
                 with st.expander("Extracted Text Preview"):
                     st.text(extracted_text[:1000] + "..." if len(extracted_text) > 1000 else extracted_text)
+                if first_page_text:
+                    with st.expander("First Page Text Preview"):
+                        st.text(first_page_text[:500] + "..." if len(first_page_text) > 500 else first_page_text)
             
             # Process extractors
             if development_mode:
                 st.info("**Starting extraction with specialized extractors...**")
             
-            results = self._process_sequential(extracted_text, development_mode)
+            results = self._process_sequential(extracted_text, first_page_text, development_mode)
             
             if development_mode:
                 st.success("**Extraction completed!**")
@@ -113,7 +125,6 @@ class ResumeProcessor:
                     "education_count": len(resume.educations),
                     "experience_count": len(resume.work_experiences),
                     "years_of_experience": resume.YoE,
-                    "resume_score": resume.resume_score
                 })
             
             return resume
@@ -127,12 +138,13 @@ class ResumeProcessor:
             
             return self._create_empty_resume(pdf_file_path)
     
-    def _process_sequential(self, extracted_text: str, development_mode: bool) -> Dict[str, Any]:
+    def _process_sequential(self, extracted_text: str, first_page_text: str, development_mode: bool) -> Dict[str, Any]:
         """
         Process extractors sequentially (optimized for local Ollama setups).
         
         Args:
-            extracted_text: The extracted resume text
+            extracted_text: The full extracted resume text
+            first_page_text: The extracted first page text (for profile extraction)
             development_mode: Whether to show detailed process
             
         Returns:
@@ -153,7 +165,18 @@ class ResumeProcessor:
                 if development_mode:
                     st.info(f"Processing {extractor_name.title()} extractor...")
                 
-                result = extractor.extract(extracted_text, development_mode)
+                # Use first page text for profile and education extraction, full text for others
+                if extractor_name in ["profile", "education"] and first_page_text:
+                    if development_mode:
+                        st.info(f"Using first page text for {extractor_name} extraction (more focused and efficient)")
+                    result = extractor.extract(first_page_text, development_mode)
+                elif extractor_name in ["profile", "education"] and not first_page_text:
+                    if development_mode:
+                        st.warning(f"First page extraction failed, using full text for {extractor_name} extraction")
+                    result = extractor.extract(extracted_text, development_mode)
+                else:
+                    result = extractor.extract(extracted_text, development_mode)
+                
                 results[extractor_name] = result
                 
                 if development_mode:
@@ -188,7 +211,6 @@ class ResumeProcessor:
             work_experiences=[],
             YoE=None,
             file_path=pdf_file_path,
-            resume_score=0
         )
     
     def get_extraction_capabilities(self) -> Dict[str, str]:

@@ -12,7 +12,6 @@ class Education(BaseModel):
     graduation_date: Optional[str] = None
     gpa: Optional[str] = None
     honors: Optional[str] = None
-    relevant_coursework: List[str] = Field(default_factory=list)
     thesis_project: Optional[str] = None
 
 

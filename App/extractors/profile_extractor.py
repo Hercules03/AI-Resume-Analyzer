@@ -19,6 +19,8 @@ class ProfileExtractor(BaseExtractor):
 You are an assistant that extracts personal/profile information from resume text.
 Focus on contact information, personal details, and online profiles.
 
+This text is from the first page of the resume, where personal information is typically located.
+
 Extract the following information if available:
 - Full name
 - Contact number/phone
@@ -27,13 +29,15 @@ Extract the following information if available:
 - Online profiles (LinkedIn, GitHub, portfolio)
 - Personal information (nationality, date of birth)
 
+Resume Text (First Page):
+```Resume Text
+{text}
+```
+
 Return your output as a JSON object with the schema provided below.
 Use null for any field that cannot be found in the resume.
 
 {format_instructions}
-
-Resume Text:
-{text}
 """
     
     def process_output(self, output: Dict[str, Any]) -> Dict[str, Any]:

@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from llm_service import LLMService
 from llm_utils import export_metadata_to_json
-from config import PAGE_CONFIG
+from config import PAGE_CONFIG, LLM_CONFIG
 from utils import get_system_info, get_location_info, generate_security_token, validate_file_upload, show_pdf, get_current_timestamp
 from resume_processor import ResumeProcessor
 import time
@@ -30,6 +30,16 @@ location_info = get_location_info()
 sec_token = generate_security_token()
 
 st.markdown('''<h5 style='text-align: left; color: #021659;'> Upload Candidate Resume for Evaluation</h5>''', unsafe_allow_html=True)
+
+# Debug mode toggle
+debug_mode = st.checkbox(
+    "🐛 Debug Mode - Show Raw LLM Prompts & Responses", 
+    value=False,
+    help="Enable this to see the exact prompts sent to the LLM and the raw responses received during resume processing"
+)
+
+if debug_mode:
+    st.info("**Debug Mode Enabled**: You will see detailed LLM interactions including prompts and raw responses for each extraction step.")
 
 def _create_tagged_resume_text(resume):
     """Create tagged resume text for robust embedding with metadata."""
@@ -654,19 +664,111 @@ if pdf_file is not None:
         with open(save_image_path, "wb") as f:
             f.write(pdf_file.getbuffer())
 
+        if debug_mode:
+            st.markdown("### 📄 **File Processing Debug Info**")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**File Information:**")
+                st.info(f"**File Name:** {pdf_file.name}")
+                st.info(f"**File Size:** {len(pdf_file.getbuffer())} bytes")
+                st.info(f"**Save Path:** {save_image_path}")
+                
+            with col2:
+                st.markdown("**LLM Service Status:**")
+                st.info(f"**Model:** {llm_model}")
+                st.info(f"**Service Available:** {'✅ Yes' if llm_service.is_available() else '❌ No'}")
+                st.info(f"**Connection Tested:** {'✅ Yes' if llm_service.connection_tested else '⏳ Pending'}")
+
         # Display PDF
         pdf_display_html = show_pdf(save_image_path)
         st.markdown(pdf_display_html, unsafe_allow_html=True)
 
         if llm_service.is_available():
             try:
-                # Process resume
-                resume = resume_processor.process_resume(save_image_path, False)
+                # Process resume with debug mode if enabled
+                if debug_mode:
+                    st.markdown("---")
+                    st.markdown("### 🐛 **LLM Debug Information**")
+                    st.markdown("Below you can see the detailed extraction process with raw prompts and responses:")
+                    
+                    # Show LLM Configuration Details
+                    st.markdown("#### 🔧 **LLM Configuration**")
+                    
+                    # Current Active Configuration
+                    active_config = {
+                        "Model Name": llm_service.model_name,
+                        "Base URL": llm_service.base_url,
+                        "Temperature": llm_service.llm.temperature if llm_service.llm else "N/A",
+                        "Max Tokens (num_predict)": llm_service.llm.num_predict if llm_service.llm else "N/A",
+                        "Top K": llm_service.llm.top_k if llm_service.llm else "N/A", 
+                        "Top P": llm_service.llm.top_p if llm_service.llm else "N/A",
+                        "Connection Status": "✅ Connected" if llm_service.is_available() else "❌ Not Connected"
+                    }
+                    
+                    # Default Configuration from config.py
+                    default_config = {
+                        "Default Model": LLM_CONFIG['default_model'],
+                        "Default URL": LLM_CONFIG['default_url'],
+                        "Default Temperature": LLM_CONFIG['temperature'],
+                        "Default Max Tokens": LLM_CONFIG['num_predict'],
+                        "Default Top K": LLM_CONFIG['top_k'],
+                        "Default Top P": LLM_CONFIG['top_p'],
+                        "Timeout": LLM_CONFIG.get('timeout', 'Not set')
+                    }
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.markdown("**Active Configuration:**")
+                        st.json(active_config)
+                    with col2:
+                        st.markdown("**Default Configuration:**")
+                        st.json(default_config)
+                    with col3:
+                        st.markdown("**Parameter Explanation:**")
+                        st.write("• **Temperature**: Controls randomness")
+                        st.write("  - 0.1 = More focused/deterministic")
+                        st.write("  - 1.0 = More creative/random")
+                        st.write("• **Max Tokens**: Maximum response length")
+                        st.write("• **Top K**: Limits vocabulary to top K words")
+                        st.write("• **Top P**: Nucleus sampling threshold")
+                        st.write("• **Timeout**: Request timeout in seconds")
+                
+                resume = resume_processor.process_resume(save_image_path, debug_mode)
 
                 if resume and resume.name != "Unknown":
+                    
+                    if debug_mode:
+                        st.markdown("---")
+                        st.markdown("### ✅ **Final Extraction Summary**")
+                        st.success("Resume processing completed successfully!")
+                        
+                        # Show extraction summary
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Profile Fields", len([v for v in [resume.name, resume.email, resume.contact_number, resume.linkedin, resume.github] if v]))
+                        with col2:
+                            st.metric("Skills Found", len(resume.skills))
+                        with col3:
+                            st.metric("Work Experiences", len(resume.work_experiences))
+                        with col4:
+                            st.metric("Education Entries", len(resume.educations))
+                        
+                        st.markdown("**Key Extracted Data:**")
+                        debug_summary = {
+                            "Name": resume.name or "Not found",
+                            "Email": resume.email or "Not found", 
+                            "Years of Experience": resume.YoE or "Not calculated",
+                            "Career Level": resume.career_level or "Not determined",
+                            "Primary Field": resume.primary_field or "Not determined",
+                            "Skills Count": len(resume.skills),
+                            "Work Experience Count": len(resume.work_experiences),
+                            "Education Count": len(resume.educations)
+                        }
+                        st.json(debug_summary)
 
                     # Display result in a structured way
-                    display_resume_results(resume, False)
+                    display_resume_results(resume, debug_mode)
 
                     # Prepare data for database
                     user_data = prepare_user_data_from_resume(
@@ -678,9 +780,51 @@ if pdf_file is not None:
 
 
                 else:
+                    if debug_mode:
+                        st.markdown("---")
+                        st.markdown("### ❌ **Debug: Extraction Issues**")
+                        st.error("Resume processing completed but no valid data was extracted.")
+                        st.warning("This usually indicates:")
+                        st.write("• PDF text extraction failed")
+                        st.write("• LLM responses were not in the expected format")
+                        st.write("• The resume format is not compatible with the extractors")
+                    
                     st.warning("Resume processing completed with limited data extraction.")
             except Exception as e:
-                st.error(f"Resume processing failed: {str(e)}")
+                if debug_mode:
+                    st.markdown("---")
+                    st.markdown("### 🚨 **Debug: Processing Error**")
+                    st.error(f"Resume processing failed: {str(e)}")
+                    st.exception(e)
+                    st.markdown("**Troubleshooting Tips:**")
+                    st.write("• Check if Ollama is running: `ollama serve`")
+                    st.write("• Verify the model is available: `ollama list`")
+                    st.write("• Check PDF file is not corrupted")
+                    st.write("• Try with a different PDF or smaller file")
+                else:
+                    st.error(f"Resume processing failed: {str(e)}")
         
         else:
-            st.error("**LLM service not available.** Please check your Ollama configuration.")
+            if debug_mode:
+                st.markdown("---")
+                st.markdown("### 🚨 **Debug: LLM Service Error**")
+                st.error("**LLM service not available.** Please check your Ollama configuration.")
+                st.markdown("**Debug Steps:**")
+                st.code("""
+# Check if Ollama is running
+ollama serve
+
+# List available models  
+ollama list
+
+# Pull the required model if not available
+ollama pull gemma3:12b
+                """)
+                st.write("**Current Configuration:**")
+                st.json({
+                    "Model": llm_model,
+                    "Base URL": llm_service.base_url,
+                    "Connection Tested": llm_service.connection_tested
+                })
+            else:
+                st.error("**LLM service not available.** Please check your Ollama configuration.")

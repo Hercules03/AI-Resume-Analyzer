@@ -92,6 +92,32 @@ class PDFProcessor:
             st.warning(f"PyMuPDF4LLM extraction failed: {e}")
             return None
     
+    def extract_first_page_with_pymupdf4llm(self, pdf_path: str) -> Optional[str]:
+        """Extract text from first page only using PyMuPDF4LLM for profile information"""
+        if not PYMUPDF4LLM_AVAILABLE:
+            return None
+        
+        try:
+            # Extract only the first page (page 0)
+            text = pymupdf4llm.to_markdown(pdf_path, pages=[0])
+            return text if text else None
+        except Exception as e:
+            st.warning(f"PyMuPDF4LLM first page extraction failed: {e}")
+            return None
+    
+    def extract_specific_pages_with_pymupdf4llm(self, pdf_path: str, pages: list) -> Optional[str]:
+        """Extract text from specific pages using PyMuPDF4LLM"""
+        if not PYMUPDF4LLM_AVAILABLE:
+            return None
+        
+        try:
+            # Extract specific pages (0-based indexing)
+            text = pymupdf4llm.to_markdown(pdf_path, pages=pages)
+            return text if text else None
+        except Exception as e:
+            st.warning(f"PyMuPDF4LLM specific pages extraction failed: {e}")
+            return None
+    
     def extract_with_easyocr(self, pdf_path: str, use_gpu: Optional[bool] = None, 
                            languages: List[str] = None, min_confidence: float = None) -> Optional[str]:
         """Extract text using EasyOCR for scanned documents"""

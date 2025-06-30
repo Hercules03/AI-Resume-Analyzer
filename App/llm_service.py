@@ -117,14 +117,34 @@ class LLMService:
             formatted_prompt = prompt.format(**input_data)
             
             if development_mode:
-                with st.expander(f"LLM Prompt for {model.__name__}"):
+                with st.expander(f"🔧 LLM Configuration for {model.__name__}"):
+                    config_details = {
+                        "Extractor": model.__name__,
+                        "Model": self.model_name,
+                        "Base URL": self.base_url,
+                        "Temperature": self.llm.temperature,
+                        "Max Tokens (num_predict)": self.llm.num_predict,
+                        "Top K": self.llm.top_k,
+                        "Top P": self.llm.top_p,
+                        "Prompt Length": len(formatted_prompt),
+                        "Input Variables": input_variables
+                    }
+                    st.json(config_details)
+                
+                with st.expander(f"📝 LLM Prompt for {model.__name__}"):
                     st.code(formatted_prompt)
             
             
             response = self.llm.invoke(formatted_prompt)
             
             if development_mode:
-                with st.expander(f"Raw LLM Response for {model.__name__}"):
+                with st.expander(f"📤 Raw LLM Response for {model.__name__}"):
+                    response_info = {
+                        "Response Length": len(response),
+                        "Response Type": type(response).__name__,
+                        "Has JSON Content": "{" in response and "}" in response
+                    }
+                    st.json(response_info)
                     st.code(response)
             
             # Try to parse with Pydantic parser first
@@ -181,13 +201,30 @@ class LLMService:
         
         try:
             if development_mode:
-                with st.expander("Simple LLM Prompt"):
+                with st.expander("🔧 Simple LLM Configuration"):
+                    simple_config = {
+                        "Model": self.model_name,
+                        "Base URL": self.base_url,
+                        "Temperature": self.llm.temperature,
+                        "Max Tokens": self.llm.num_predict,
+                        "Top K": self.llm.top_k,
+                        "Top P": self.llm.top_p,
+                        "Prompt Length": len(prompt)
+                    }
+                    st.json(simple_config)
+                
+                with st.expander("📝 Simple LLM Prompt"):
                     st.code(prompt)
             
             response = self.llm.invoke(prompt)
             
             if development_mode:
-                with st.expander("Simple LLM Response"):
+                with st.expander("📤 Simple LLM Response"):
+                    response_info = {
+                        "Response Length": len(response),
+                        "Response Type": type(response).__name__
+                    }
+                    st.json(response_info)
                     st.code(response)
             
             return response

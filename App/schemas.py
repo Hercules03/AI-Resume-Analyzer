@@ -45,7 +45,6 @@ class Education(BaseModel):
     graduation_date: Optional[str] = Field(description="Graduation date (MM/YYYY or year)")
     gpa: Optional[str] = Field(description="GPA or grade if mentioned")
     honors: Optional[str] = Field(description="Honors, cum laude, dean's list, etc.")
-    relevant_coursework: List[str] = Field(description="Relevant courses or subjects")
     thesis_project: Optional[str] = Field(description="Thesis, capstone, or major project title")
 
 
