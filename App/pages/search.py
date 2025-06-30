@@ -41,10 +41,10 @@ def analyze_job_description(job_description):
         {job_description}
 
         Please extract:
-        1. Required technical skills (programming languages, frameworks, tools)
-        2. Key requirements (experience level, education, certifications)
-        3. Experience level (Entry/Junior/Mid/Senior/Lead)
-        4. Field/Domain (Web Development, Data Science, Mobile, etc.)
+        1. Required skills and qualifications (technical skills, soft skills, certifications, tools)
+        2. Key requirements (experience level, education, licenses, industry knowledge)
+        3. Experience level (Entry/Junior/Mid/Senior/Lead/Executive)
+        4. Field/Domain (Healthcare, Finance, Marketing, Engineering, Sales, Education, etc.)
 
         Format as JSON:
         {{
@@ -274,14 +274,16 @@ def handle_filter_method():
 
         field_filter = st.selectbox(
             "Field",
-            ['All Fields', 'Data Science & Analytics', 'Web Development', 'Backend Development', 
-             'Mobile Development', 'DevOps & Cloud', 'Machine Learning', 'General'],
+            ['All Fields', 'Healthcare', 'Finance & Accounting', 'Marketing & Sales', 'Human Resources', 
+             'Education & Training', 'Engineering & Technology', 'Operations & Supply Chain', 
+             'Legal & Compliance', 'Customer Service', 'Administrative', 'Construction & Manufacturing', 
+             'Design & Creative', 'Consulting', 'General'],
             key="filter_field"
         )
 
         level_filter = st.selectbox(
             "Experience Level",
-            ['All Levels', 'Entry Level', 'Junior', 'Mid Level', 'Senior', 'Lead/Expert'],
+            ['All Levels', 'Entry Level', 'Junior', 'Mid Level', 'Senior', 'Lead/Manager', 'Executive/Director'],
             key="filter_level"
         )
         
@@ -305,15 +307,17 @@ def handle_filter_method():
         state_filter = st.selectbox("State", states, key="filter_state")
     
     with col3:
-        st.markdown("**Skills**")
+        st.markdown("**Skills & Qualifications**")
 
         required_skills = st_tags(
-            label="Required Skills",
+            label="Required Skills/Qualifications",
             text="Press enter to add skills",
             value=[],
-            suggestions=['Python', 'JavaScript', 'React', 'Machine Learning', 'Data Science', 
-                        'Java', 'SQL', 'AWS', 'Docker', 'Node.js', 'Angular', 'Vue.js',
-                        'C#', 'ASP.NET', 'Ruby', 'Rails', 'PHP', 'WordPress', 'Shopify', 'Magento', 'E-commerce'],
+            suggestions=['Leadership', 'Project Management', 'Communication', 'Data Analysis', 'Sales', 
+                        'Customer Service', 'Microsoft Office', 'Financial Analysis', 'Training', 'Budgeting',
+                        'Strategic Planning', 'Team Management', 'Problem Solving', 'Research', 'Compliance',
+                        'Quality Assurance', 'Process Improvement', 'Negotiation', 'Public Speaking', 'Writing',
+                        'Spanish', 'French', 'Bilingual', 'CPA', 'PMP', 'Six Sigma', 'LEAN', 'ISO Standards'],
             maxtags=10,
             key="filter_skills"
         )
@@ -346,24 +350,24 @@ def handle_job_description_search():
         job_description = st.text_area(
             "**Job Description:**",
             placeholder="""Example:
-Senior Python Developer - Remote
+Marketing Manager - Full Time
 
-We are looking for an experienced Python developer to join our team:
+We are seeking a dynamic Marketing Manager to join our growing team:
 
 Requirements:
-• 5+ years of Python development experience
-• Strong experience with Django or Flask frameworks
-• Machine learning and data analysis experience preferred
-• AWS cloud deployment experience
-• Experience with RESTful APIs and microservices
-• Strong problem-solving and communication skills
-• Bachelor's degree in Computer Science or related field
+• 3-5 years of marketing experience
+• Strong experience with digital marketing and social media
+• Project management and campaign development skills
+• Excellent written and verbal communication abilities
+• Experience with analytics tools and data-driven decision making
+• Bachelor's degree in Marketing, Communications, or related field
 
 Responsibilities:
-• Develop and maintain Python applications
-• Collaborate with data science team on ML projects
-• Deploy applications to AWS cloud infrastructure
-• Code review and mentoring junior developers
+• Develop and execute comprehensive marketing strategies
+• Manage social media presence and content creation
+• Coordinate with sales team on lead generation campaigns
+• Analyze market trends and customer behavior
+• Oversee brand messaging and marketing materials
 """,
             height=300,
             key="job_description"
@@ -376,26 +380,29 @@ Responsibilities:
 
         st.markdown("**Quick Templates:**")
         templates = {
-                "Mobile Dev": """Mobile Application Developer
-• 3+ years mobile development experience
-• iOS (Swift) and Android (Kotlin/Java)
-• React Native or Flutter preferred
-• App Store/Play Store publishing
-• UI/UX collaboration experience""",
+            "Sales Rep": """Sales Representative
+• 2+ years sales experience
+• Customer relationship management
+• Strong communication and negotiation skills
+• CRM software experience (Salesforce, HubSpot)
+• Goal-oriented and self-motivated
+• Bachelor's degree preferred""",
             
-            "ML Engineer": """Machine Learning Engineer
-• 4+ years ML/AI development experience
-• Python, TensorFlow, PyTorch
-• Data preprocessing and feature engineering
-• Model deployment and MLOps experience
-• Statistical analysis and research skills""",
+            "HR Specialist": """Human Resources Specialist
+• 3+ years HR experience
+• Knowledge of employment law and regulations
+• Experience with HRIS systems
+• Strong interpersonal and problem-solving skills
+• Recruitment and employee relations experience
+• HR certification preferred""",
             
-            "Full Stack": """Full Stack Developer
-• 5+ years full-stack development
-• Frontend: React, Vue.js, or Angular
-• Backend: Node.js, Python, or Java
-• Database design and optimization
-• RESTful API development"""
+            "Finance Analyst": """Financial Analyst
+• 2-4 years financial analysis experience
+• Advanced Excel and financial modeling skills
+• Knowledge of accounting principles and financial reporting
+• Experience with ERP systems
+• Strong analytical and detail-oriented mindset
+• Bachelor's degree in Finance or Accounting"""
         }
 
         for template_name, template_content in templates.items():
@@ -463,6 +470,27 @@ def handle_chat_search():
     st.markdown("### **Find by Chat**")
     st.markdown("Chat with our AI assistant to find candidates using natural language")
 
+    # Add example queries for different industries
+    st.markdown("**Try asking questions like:**")
+    example_col1, example_col2, example_col3 = st.columns(3)
+    
+    with example_col1:
+        if st.button("Find nurses with 5+ years ICU experience", key="example_1"):
+            st.session_state.example_query = "Find nurses with 5+ years ICU experience"
+        if st.button("Show me accountants with CPA certification", key="example_2"):
+            st.session_state.example_query = "Show me accountants with CPA certification"
+    
+    with example_col2:
+        if st.button("Find sales managers in California", key="example_3"):
+            st.session_state.example_query = "Find sales managers in California"
+        if st.button("Looking for teachers with ESL experience", key="example_4"):
+            st.session_state.example_query = "Looking for teachers with ESL experience"
+            
+    with example_col3:
+        if st.button("Find project managers with PMP", key="example_5"):
+            st.session_state.example_query = "Find project managers with PMP certification"
+        if st.button("Show marketing professionals with social media skills", key="example_6"):
+            st.session_state.example_query = "Show marketing professionals with social media skills"
 
     # Check if chatbot is available
     if not candidate_chatbot.is_available():
@@ -473,27 +501,28 @@ def handle_chat_search():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # Create a scrollable container for chat messages
-    st.markdown("""
-    <style>
-    .stContainer > div:first-child {
-        height: 400px;
-        overflow-y: auto;
-        padding: 10px;
-        border: 1px solid #e1e4e8;
-        border-radius: 8px;
-        background-color: #fafafa;
-        margin-bottom: 20px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Create the chat message container
-    with st.container(height=400):
+    # Handle example query from buttons
+    if 'example_query' in st.session_state:
+        user_input = st.session_state.example_query
+        del st.session_state.example_query
         
-        # Display chat history
-        if st.session_state.chat_history:
-            for i, message in enumerate(st.session_state.chat_history):
+        # Process the example query immediately
+        with st.spinner("Searching candidates..."):
+            response = candidate_chatbot.chat(user_input)
+            
+        # Add to chat history
+        st.session_state.chat_history.append({
+            "user": user_input,
+            "assistant": response
+        })
+
+    # Create a single chat message container
+    st.markdown("---")
+    
+    # Display chat history in a clean container
+    if st.session_state.chat_history:
+        with st.container(height=400):
+            for message in st.session_state.chat_history:
                 # User message
                 with st.chat_message("user"):
                     st.write(message["user"])
@@ -501,51 +530,32 @@ def handle_chat_search():
                 # Assistant message
                 with st.chat_message("assistant"):
                     st.write(message["assistant"])
+    else:
+        # Show empty state
+        with st.container(height=400):
+            st.markdown("*Start a conversation by typing a message below or clicking one of the example buttons above.*")
     
-    # Fixed chat input at bottom
-    st.markdown("---")
-    user_input = st.chat_input("Type your message here... (e.g., 'Find me Python developers with 3+ years experience')")
+    # Chat input
+    user_input = st.chat_input("Type your message here... (e.g., 'Find me accountants with 3+ years experience in public accounting')")
     
     # Clear chat button
     if st.button("Clear Chat History", key="clear_chat", help="Clear chat history"):
         st.session_state.chat_history = []
         candidate_chatbot.clear_history()
         st.rerun()
-
-    # Handle example query from buttons
-    if 'example_query' in st.session_state:
-        user_input = st.session_state.example_query
-        del st.session_state.example_query
     
-    # Process user input
+    # Process user input from chat input
     if user_input:
-        # Add user message to history
+        # Show processing message
+        with st.spinner("Searching candidates..."):
+            response = candidate_chatbot.chat(user_input)
+            
+        # Add to chat history
         st.session_state.chat_history.append({
             "user": user_input,
-            "assistant": "Processing..."
+            "assistant": response
         })
-
-        # Show processing status in the chat area
-        with st.container(height=400):
-            # Display existing chat history
-            for i, message in enumerate(st.session_state.chat_history[:-1]):  # All except the last processing message
-                with st.chat_message("user"):
-                    st.write(message["user"])
-                with st.chat_message("assistant"):
-                    st.write(message["assistant"])
-
-            # Show the current user message
-            with st.chat_message("user"):
-                st.write(st.session_state.chat_history[-1]["user"])
-
-            # Show processing spinner in chat area
-            with st.chat_message("assistant"):
-                with st.spinner("Searching candidates..."):
-                    response = candidate_chatbot.chat(user_input)
-
-        # Update the last message with the actual response
-        st.session_state.chat_history[-1]["assistant"] = response
-
+        
         st.rerun()
         
 # Create three tabs for different search methods
@@ -559,4 +569,3 @@ with tab2:
 
 with tab3:
     handle_chat_search()
-
