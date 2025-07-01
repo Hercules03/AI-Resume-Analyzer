@@ -14,7 +14,9 @@ from db_specialists import (
     IntentSpecialist,
     NameExtractionSpecialist, 
     QueryEnhancementSpecialist,
-    ResponseGenerationSpecialist
+    SearchResponseSpecialist,
+    InfoResponseSpecialist,
+    GeneralResponseSpecialist
 )
 
 
@@ -39,7 +41,11 @@ class CandidateSearchChatbot:
         self.intent_specialist = IntentSpecialist(SPECIALISTS_CONFIG['intent_analysis'])
         self.name_extraction_specialist = NameExtractionSpecialist(SPECIALISTS_CONFIG['name_extraction'])
         self.query_enhancement_specialist = QueryEnhancementSpecialist(SPECIALISTS_CONFIG['query_enhancement'])
-        self.response_generation_specialist = ResponseGenerationSpecialist(SPECIALISTS_CONFIG['response_generation'])
+        
+        # Initialize specialized response generators
+        self.search_response_specialist = SearchResponseSpecialist(SPECIALISTS_CONFIG['search_response'])
+        self.info_response_specialist = InfoResponseSpecialist(SPECIALISTS_CONFIG['info_response'])
+        self.general_response_specialist = GeneralResponseSpecialist(SPECIALISTS_CONFIG['general_response'])
         
         self._build_graph()
     
@@ -52,7 +58,9 @@ class CandidateSearchChatbot:
         # Add nodes
         workflow.add_node("analyze_intent", self._analyze_intent)
         workflow.add_node("search_candidates", self._search_candidates)
-        workflow.add_node("generate_response", self._generate_response)
+        workflow.add_node("generate_search_response", self._generate_search_response)
+        workflow.add_node("generate_info_response", self._generate_info_response)
+        workflow.add_node("generate_general_response", self._generate_general_response)
         
         # Define edges
         workflow.add_edge(START, "analyze_intent")
@@ -62,11 +70,20 @@ class CandidateSearchChatbot:
             {
                 "search": "search_candidates",
                 "info": "search_candidates",  # Also search for specific info requests
-                "general": "generate_response"
+                "general": "generate_general_response"
             }
         )
-        workflow.add_edge("search_candidates", "generate_response")
-        workflow.add_edge("generate_response", END)
+        workflow.add_conditional_edges(
+            "search_candidates",
+            self._route_to_response_specialist,
+            {
+                "search": "generate_search_response",
+                "info": "generate_info_response"
+            }
+        )
+        workflow.add_edge("generate_search_response", END)
+        workflow.add_edge("generate_info_response", END)
+        workflow.add_edge("generate_general_response", END)
         
         # Compile the graph
         self.graph = workflow.compile()
@@ -83,7 +100,6 @@ class CandidateSearchChatbot:
             return {
                 "user_intent": result['intent'],
                 "intent_confidence": result['confidence'],
-                "search_query": result['search_query']
             }
         
         except Exception as e:
@@ -99,81 +115,45 @@ class CandidateSearchChatbot:
         intent = state.get("user_intent", "general")
         return "search" if intent in ["search", "info"] else "general"
     
-    def _filter_results_by_name(self, search_results: List[Dict[str, Any]], target_name: str) -> List[Dict[str, Any]]:
-        """Filter search results to only include candidates with matching names"""
-        
-        if not target_name or not search_results:
-            return search_results
-        
-        target_name_lower = target_name.lower().strip()
-        target_parts = target_name_lower.split()
-        
-        filtered_results = []
-        
-        for result in search_results:
-            metadata = result.get('metadata', {})
-            candidate_name = metadata.get('name', '').lower().strip()
-            
-            if not candidate_name:
-                continue
-            
-            candidate_parts = candidate_name.split()
-            
-            # Check for exact match
-            if candidate_name == target_name_lower:
-                filtered_results.append(result)
-                continue
-            
-            # Check if all target name parts are in candidate name
-            if all(part in candidate_parts for part in target_parts):
-                filtered_results.append(result)
-                continue
-            
-            # Check for partial matches (useful for different name formats)
-            matches = sum(1 for part in target_parts if any(part in candidate_part for candidate_part in candidate_parts))
-            if matches >= len(target_parts) * 0.7:  # 70% match threshold
-                filtered_results.append(result)
-        
-        return filtered_results
+    def _route_to_response_specialist(self, state: ChatState) -> str:
+        """Route to appropriate response specialist after search"""
+        intent = state.get("user_intent", "search")
+        return intent  # Returns "search" or "info"
     
     def _search_candidates(self, state: ChatState) -> Dict[str, Any]:
         """Search for candidates using ChromaDB semantic search"""
         
+        # Use the raw user message if no search_query is available
         search_query = state.get("search_query", "")
+        if not search_query:
+            search_query = state["messages"][-1].content if state["messages"] else ""
+        
         user_intent = state.get("user_intent", "search")
         
         if not search_query:
             return {"search_results": [], "context": "No search query provided."}
         
         try:
-            # For info requests, search more specifically for named candidates
+            # Simple search logic
             if user_intent == "info":
-                # Extract potential names from the query using name extraction specialist
+                # Extract candidate name for specific info requests
                 candidate_name = self.name_extraction_specialist.execute(query=search_query)
                 
                 if candidate_name:
-                    # Search specifically for this candidate
-                    search_results = db_manager.semantic_search_resumes(candidate_name, n_results=50)
-                    
-                    # Filter results to only include candidates with matching names
-                    filtered_results = self._filter_results_by_name(search_results, candidate_name)
-                    
-                    # If we found specific matches, use only those
-                    if filtered_results:
-                        search_results = filtered_results
-                    else:
-                        # If no exact matches, try a broader search but still limit results
-                        search_results = search_results[:5]
+                    # Search for specific candidate
+                    search_results = db_manager.semantic_search_resumes(candidate_name, n_results=10)
+                    # Simple name filtering
+                    search_results = self._filter_by_name(search_results, candidate_name)
                 else:
-                    # No specific name found, do a general search
-                    search_results = db_manager.semantic_search_resumes(search_query, n_results=10)
+                    # General info search
+                    search_results = db_manager.semantic_search_resumes(search_query, n_results=5)
             else:
-                # Enhance the search query for better matching using query enhancement specialist
+                # Regular search
                 enhanced_query = self.query_enhancement_specialist.execute(query=search_query)
-                search_results = db_manager.semantic_search_resumes(enhanced_query, n_results=10)
+                search_results = db_manager.semantic_search_resumes(enhanced_query, n_results=5)
             
-            # Create context from search results
-            context = self._create_context_from_results(search_results, user_intent, candidate_name if user_intent == "info" else None)
+            # Create simple context
+            context = self._create_simple_context(search_results, user_intent)
             
             return {
                 "search_results": search_results,
@@ -186,199 +166,108 @@ class CandidateSearchChatbot:
                 "search_results": [],
                 "context": "Search failed due to technical error."
             }
-        
-    def _is_target_candidate(self, candidate_name: str, target_name: str) -> bool:
-        """Check if the candidate name matches the target name"""
-        
-        if not candidate_name or not target_name:
-            return False
-        
-        candidate_lower = candidate_name.lower().strip()
-        target_lower = target_name.lower().strip()
-        
-        # Exact match
-        if candidate_lower == target_lower:
-            return True
-        
-        # Check if all target name parts are in candidate name
-        target_parts = target_lower.split()
-        candidate_parts = candidate_lower.split()
-        
-        # All target parts should be present in candidate name
-        return all(any(target_part in candidate_part for candidate_part in candidate_parts) 
-                for target_part in target_parts)
     
-    def _extract_education_info(self, metadata: Dict[str, Any]) -> str:
-        """Extract education information from metadata, checking multiple sources"""
+    def _filter_by_name(self, search_results: List[Dict[str, Any]], target_name: str) -> List[Dict[str, Any]]:
+        """Simple name filtering"""
+        if not target_name or not search_results:
+            return search_results
         
-        # First, check the educations field
-        educations = metadata.get('educations', '')
-        if educations and educations not in ['', 'Not extracted', 'No education details available']:
-            return educations
+        target_lower = target_name.lower()
+        filtered = []
         
-        # If educations field is empty or not useful, check extracted_text for education tags
-        extracted_text = metadata.get('extracted_text', '')
-        if extracted_text and 'EDUCATION' in extracted_text.upper():
-            # Look for education sections in the tagged extracted text
-            education_sections = []
-            sections = extracted_text.split('||')
+        for result in search_results:
+            metadata = result.get('metadata', {})
+            candidate_name = metadata.get('name', '').lower()
             
-            for section in sections:
-                if 'EDUCATION' in section.upper():
-                    # Clean up the section and extract meaningful information
-                    clean_section = section.strip()
-                    # Remove section tags and format nicely
-                    if '[SECTION:EDUCATION' in clean_section:
-                        clean_section = clean_section.split(']', 1)[-1].strip()
-                    
-                    # Replace tag markers with readable text
-                    clean_section = clean_section.replace('[DEGREE]', 'Degree:')
-                    clean_section = clean_section.replace('[FIELD_OF_STUDY]', 'Field:')
-                    clean_section = clean_section.replace('[INSTITUTION]', 'Institution:')
-                    clean_section = clean_section.replace('[GRADUATION]', 'Graduated:')
-                    clean_section = clean_section.replace('[GPA]', 'GPA:')
-                    clean_section = clean_section.replace('|', ',')
-                    
-                    if clean_section:
-                        education_sections.append(clean_section)
-            
-            if education_sections:
-                return '\n'.join(f"• {section}" for section in education_sections)
+            # Simple check: if target name parts are in candidate name
+            if target_lower in candidate_name or any(part in candidate_name for part in target_lower.split()):
+                filtered.append(result)
         
-        # Check full_resume_data for education information
-        full_resume = metadata.get('full_resume_data', '')
-        if full_resume and ('education' in full_resume.lower() or 'degree' in full_resume.lower()):
-            # Extract lines that might contain education information
-            lines = full_resume.split(';')
-            education_lines = [line.strip() for line in lines 
-                             if any(edu_word in line.lower() for edu_word in ['education', 'degree', 'university', 'college', 'bachelor', 'master', 'phd'])]
-            if education_lines:
-                return '; '.join(education_lines)
-        
-        return 'No detailed education information available in database'
+        return filtered if filtered else search_results[:3]  # Return top 3 if no matches
     
-    def _create_context_from_results(self, search_results: List[Dict[str, Any]], intent: str = "search", specific_candidate: str = None) -> str:
-        """Create context string from search results for the LLM with detailed CV content"""
+    def _get_candidate_info(self, metadata: Dict[str, Any]) -> str:
+        """Get candidate information from metadata - SIMPLIFIED"""
+        
+        # Priority 1: Try raw resume text first (if we implement it)
+        raw_text = metadata.get('raw_resume_text', '')
+        if raw_text and raw_text != 'Not available':
+            return f"Resume Content:\n{raw_text[:2000]}..."  # First 2000 chars
+        
+        # Priority 2: Try structured fields
+        info_parts = []
+        
+        # Basic info
+        info_parts.append(f"Name: {metadata.get('name', 'Unknown')}")
+        info_parts.append(f"Email: {metadata.get('email', 'Not provided')}")
+        info_parts.append(f"Field: {metadata.get('reco_field', 'General')}")
+        info_parts.append(f"Level: {metadata.get('cand_level', 'Unknown')}")
+        info_parts.append(f"Experience: {metadata.get('years_of_experience', 'Not specified')}")
+        
+        # Skills
+        skills = metadata.get('skills', '')
+        if skills:
+            info_parts.append(f"Skills: {skills}")
+        
+        # Work experience
+        work_exp = metadata.get('work_experiences', '')
+        if work_exp:
+            info_parts.append(f"Work Experience: {work_exp[:500]}...")
+        
+        # Education - SIMPLIFIED
+        education = metadata.get('educations', '')
+        if education:
+            info_parts.append(f"Education: {education}")
+        else:
+            # Simple fallback
+            info_parts.append("Education: Not detailed in database")
+        
+        return "\n".join(info_parts)
+    
+    def _create_simple_context(self, search_results: List[Dict[str, Any]], intent: str = "search") -> str:
+        """Create simple context from search results - MUCH SIMPLIFIED"""
         
         if not search_results:
-            if specific_candidate:
-                return f"No information found for candidate '{specific_candidate}' in the database."
             return "No candidates found matching the search criteria."
         
         context_parts = []
         
-        # For info requests about a specific candidate, only show that candidate
-        if intent == "info" and specific_candidate:
-            # Only show the specific candidate's information
-            candidate_shown = False
-            
-            for result in search_results:
+        # Simple logic: show detailed info for info requests, summary for search
+        if intent == "info":
+            # Show detailed info for first few candidates
+            for i, result in enumerate(search_results[:2], 1):
                 metadata = result.get('metadata', {})
-                candidate_name = metadata.get('name', '').strip()
-                
-                # Check if this is the candidate we're looking for
-                if self._is_target_candidate(candidate_name, specific_candidate):
-                    similarity = round(result.get('similarity_score', 0) * 100, 1)
-                    
-                    candidate_info = f"""
-                    CANDIDATE: {candidate_name}
-                    
-                    CONTACT INFORMATION:
-                    - Email: {metadata.get('email', 'Not provided')}
-                    - Phone: {metadata.get('phone', 'Not provided')}
-                    - LinkedIn: {metadata.get('linkedin', 'Not provided')}
-                    
-                    PROFESSIONAL DETAILS:
-                    - Field: {metadata.get('reco_field', 'General')}
-                    - Experience Level: {metadata.get('cand_level', 'Unknown')}
-                    - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
-                    - Location: {metadata.get('city', '')}, {metadata.get('state', '')}, {metadata.get('country', '')}
-                    - Resume File: {metadata.get('pdf_name', 'Unknown')}
-                    - Database Match Score: {similarity}%
-                    
-                    SKILLS & EXPERTISE:
-                    {metadata.get('skills', 'Not specified')}
-                    
-                    DETAILED WORK EXPERIENCE:
-                    {metadata.get('work_experiences', 'No work experience details available')}
-                    
-                    EDUCATION BACKGROUND:
-                    {self._extract_education_info(metadata)}
-                    
-                    ADDITIONAL PROFILE DATA:
-                    {metadata.get('full_resume_data', 'No additional data available')}
-                    """
-                    context_parts.append(candidate_info.strip())
-                    candidate_shown = True
-                    break  # Only show the first match for the specific candidate
-            
-            if not candidate_shown:
-                return f"Could not find specific information for candidate '{specific_candidate}' in the database. The search returned {len(search_results)} results, but none matched the requested candidate name exactly."
-                
-        elif intent == "info":
-            # General info request without specific candidate - show top 3
+                                
+                candidate_info = f"""
+{self._get_candidate_info(metadata)}
+                """.strip()
+                context_parts.append(candidate_info)
+        else:
+            # Show summary for search results
             for i, result in enumerate(search_results[:3], 1):
                 metadata = result.get('metadata', {})
                 similarity = round(result.get('similarity_score', 0) * 100, 1)
                 
-                candidate_info = f"""
-                Candidate {i}: {metadata.get('name', 'Unknown')}
-                - Email: {metadata.get('email', 'Not provided')}
-                - Field: {metadata.get('reco_field', 'General')}
-                - Experience Level: {metadata.get('cand_level', 'Unknown')}
-                - Location: {metadata.get('city', '')}, {metadata.get('state', '')}, {metadata.get('country', '')}
-                - Skills: {metadata.get('skills', 'Not specified')}
-                - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
-                - Resume File: {metadata.get('pdf_name', 'Unknown')}
-                - Match Score: {similarity}%
-                
-                DETAILED WORK EXPERIENCE:
-                {metadata.get('work_experiences', 'No work experience details available')}
-                
-                EDUCATION BACKGROUND:
-                {self._extract_education_info(metadata)}
-                """
-                context_parts.append(candidate_info.strip())
-        else:
-            # For search requests, provide summary information with key details
-            for i, result in enumerate(search_results[:5], 1):
-                metadata = result.get('metadata', {})
-                similarity = round(result.get('similarity_score', 0) * 100, 1)
-                
-                # Extract first job for quick reference
-                work_exp = metadata.get('work_experiences', '')
-                first_job = "No work experience"
-                if work_exp and work_exp != '':
-                    first_job = work_exp.split(';')[0] if ';' in work_exp else work_exp[:150] + "..."
-                
-                candidate_info = f"""
-                Candidate {i}: {metadata.get('name', 'Unknown')}
-                - Email: {metadata.get('email', 'Not provided')}
-                - Field: {metadata.get('reco_field', 'General')}
-                - Experience Level: {metadata.get('cand_level', 'Unknown')}
-                - Location: {metadata.get('city', '')}, {metadata.get('state', '')}
-                - Years of Experience: {metadata.get('years_of_experience', 'Not specified')}
-                - Recent/First Job: {first_job}
-                - Key Skills: {str(metadata.get('skills', 'Not specified'))[:100]}...
-                - Similarity Score: {similarity}%
-                """
-                context_parts.append(candidate_info.strip())
+                summary = f"""
+Candidate {i}: {metadata.get('name', 'Unknown')} 
+- Field: {metadata.get('reco_field', 'General')}
+- Level: {metadata.get('cand_level', 'Unknown')}
+- Experience: {metadata.get('years_of_experience', 'Not specified')}
+                """.strip()
+                context_parts.append(summary)
         
         return "\n\n".join(context_parts)
     
-    def _generate_response(self, state: ChatState) -> Dict[str, Any]:
-        """Generate final response using the response generation specialist"""
+    def _generate_search_response(self, state: ChatState) -> Dict[str, Any]:
+        """Generate response for search queries using the search response specialist"""
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         context = state.get("context", "")
         search_results = state.get("search_results", [])
-        user_intent = state.get("user_intent", "general")
         
         try:
-            # Use response generation specialist
-            response = self.response_generation_specialist.execute(
+            # Use search response specialist
+            response = self.search_response_specialist.execute(
                 user_message=last_message,
-                intent=user_intent,
                 context=context,
                 search_results=search_results
             )
@@ -389,8 +278,52 @@ class CandidateSearchChatbot:
             return {"messages": new_messages}
         
         except Exception as e:
-            st.error(f"Response generation failed: {e}")
-            error_response = "I apologize, but I'm having trouble processing your request right now. Please try again."
+            st.error(f"Search response generation failed: {e}")
+            error_response = "I apologize, but I'm having trouble processing your candidate search right now. Please try again."
+            return {"messages": [AIMessage(content=error_response)]}
+    
+    def _generate_info_response(self, state: ChatState) -> Dict[str, Any]:
+        """Generate response for info queries using the info response specialist"""
+        
+        last_message = state["messages"][-1].content if state["messages"] else ""
+        context = state.get("context", "")
+        
+        try:
+            # Use info response specialist
+            response = self.info_response_specialist.execute(
+                user_message=last_message,
+                context=context
+            )
+            
+            # Add the response to messages
+            new_messages = [AIMessage(content=response)]
+            
+            return {"messages": new_messages}
+        
+        except Exception as e:
+            st.error(f"Info response generation failed: {e}")
+            error_response = "I'm unable to retrieve the specific candidate information you requested at the moment. Please try again."
+            return {"messages": [AIMessage(content=error_response)]}
+    
+    def _generate_general_response(self, state: ChatState) -> Dict[str, Any]:
+        """Generate response for general queries using the general response specialist"""
+        
+        last_message = state["messages"][-1].content if state["messages"] else ""
+        
+        try:
+            # Use general response specialist
+            response = self.general_response_specialist.execute(
+                user_message=last_message
+            )
+            
+            # Add the response to messages
+            new_messages = [AIMessage(content=response)]
+            
+            return {"messages": new_messages}
+        
+        except Exception as e:
+            st.error(f"General response generation failed: {e}")
+            error_response = "Hello! I'm your AI HR assistant. I can help you find candidates and answer questions about the resume database. How can I assist you today?"
             return {"messages": [AIMessage(content=error_response)]}
     
     def chat(self, user_message: str) -> str:
@@ -428,6 +361,88 @@ class CandidateSearchChatbot:
         except Exception as e:
             st.error(f"Chat processing failed: {e}")
             return "I encountered an error while processing your request. Please try again."
+
+    def chat_stream(self, user_message: str):
+        """Main chat interface with streaming"""
+        
+        if not self.graph:
+            yield "Chatbot is not properly initialized. Please check your configuration."
+            return
+        
+        response_chunks = []
+        
+        try:
+            # Analyze intent first
+            intent_result = self.intent_specialist.execute(message=user_message)
+            user_intent = intent_result.get('intent', 'general')
+            
+            # Search candidates if needed
+            search_results = []
+            context = ""
+            
+            if user_intent in ["search", "info"]:
+                # Search for candidates
+                search_results = self._search_candidates_simple(user_message, user_intent)
+                context = self._create_simple_context(search_results, user_intent)
+            
+            # Stream the appropriate response
+            if user_intent == "search":
+                for chunk in self.search_response_specialist.stream(
+                    user_message=user_message,
+                    context=context,
+                    search_results=search_results
+                ):
+                    response_chunks.append(chunk)
+                    yield chunk
+            elif user_intent == "info":
+                for chunk in self.info_response_specialist.stream(
+                    user_message=user_message,
+                    context=context
+                ):
+                    response_chunks.append(chunk)
+                    yield chunk
+            else:
+                for chunk in self.general_response_specialist.stream(
+                    user_message=user_message
+                ):
+                    response_chunks.append(chunk)
+                    yield chunk
+            
+            # Store complete conversation history after streaming
+            complete_response = "".join(response_chunks)
+            self.conversation_history.append({"user": user_message, "assistant": complete_response})
+            
+        except Exception as e:
+            st.error(f"Chat streaming failed: {e}")
+            error_msg = "I encountered an error while processing your request. Please try again."
+            self.conversation_history.append({"user": user_message, "assistant": error_msg})
+            yield error_msg
+
+    def _search_candidates_simple(self, user_message: str, user_intent: str):
+        """Simplified candidate search for streaming"""
+        try:
+            if user_intent == "info":
+                # Extract candidate name for specific info requests
+                candidate_name = self.name_extraction_specialist.execute(query=user_message)
+                
+                if candidate_name:
+                    # Search for specific candidate
+                    search_results = db_manager.semantic_search_resumes(candidate_name, n_results=10)
+                    # Simple name filtering
+                    search_results = self._filter_by_name(search_results, candidate_name)
+                else:
+                    # General info search
+                    search_results = db_manager.semantic_search_resumes(user_message, n_results=5)
+            else:
+                # Regular search
+                enhanced_query = self.query_enhancement_specialist.execute(query=user_message)
+                search_results = db_manager.semantic_search_resumes(enhanced_query, n_results=5)
+            
+            return search_results
+        
+        except Exception as e:
+            st.error(f"Candidate search failed: {e}")
+            return []
     
     def get_conversation_history(self) -> List[Dict[str, str]]:
         """Get conversation history"""
@@ -444,7 +459,9 @@ class CandidateSearchChatbot:
             self.intent_specialist.is_available() and
             self.name_extraction_specialist.is_available() and
             self.query_enhancement_specialist.is_available() and
-            self.response_generation_specialist.is_available()
+            self.search_response_specialist.is_available() and
+            self.info_response_specialist.is_available() and
+            self.general_response_specialist.is_available()
         )
     
     def get_specialists_status(self) -> Dict[str, bool]:
@@ -453,7 +470,9 @@ class CandidateSearchChatbot:
             'intent_specialist': self.intent_specialist.is_available(),
             'name_extraction_specialist': self.name_extraction_specialist.is_available(),
             'query_enhancement_specialist': self.query_enhancement_specialist.is_available(),
-            'response_generation_specialist': self.response_generation_specialist.is_available()
+            'search_response_specialist': self.search_response_specialist.is_available(),
+            'info_response_specialist': self.info_response_specialist.is_available(),
+            'general_response_specialist': self.general_response_specialist.is_available()
         }
 
 

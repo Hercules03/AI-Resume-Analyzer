@@ -273,10 +273,6 @@ class Resume(BaseModel):
     
     def to_legacy_format(self) -> Dict[str, Any]:
         """Convert to legacy format for backward compatibility."""
-        # For legacy compatibility, we'll use a simple completeness percentage
-        gaps = self.analyze_resume_gaps()
-        completeness_score = max(0, 100 - (len(gaps["critical_missing"]) * 20 + len(gaps["professional_missing"]) * 5))
-        
         return {
             'name': self.name,
             'email': self.email,

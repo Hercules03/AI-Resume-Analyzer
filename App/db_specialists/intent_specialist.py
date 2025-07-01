@@ -29,12 +29,20 @@ class IntentSpecialist(BaseSpecialist):
         * "Looking for data scientists."
 
 2.  **info:** The user is asking for specific details about one or more existing candidates.
-    * **Keywords/Phrases:** "what's," "tell me about," "contact details," "show me," "resume," "email address," "phone number," "experience of."
+    * **Keywords/Phrases:** "what's," "tell me about," "contact details," "show me," "resume," "email address," "phone number," "experience of," "education," "background," "details," "qualifications."
+    * **Pattern:** Usually contains a person's name AND asks for specific information about them.
     * **Examples:**
         * "What's John's email address?"
         * "Tell me about Sarah Johnson's experience."
+        * "What is the education background of John Doe?"
         * "Contact details for Mike Smith."
         * "Show me Mary's resume."
+        * "What's Lam Wai Cheung Ronald education?"
+        * "Tell me about Ronald's education background."
+        * "What education does Ronald have?"
+        * "Ronald Lam education details."
+        * "What are Sarah's qualifications?"
+        * "Show me David's work experience."
 
 3.  **general:** The user's message is a greeting, a general question about the system, or a request for help.
     * **Keywords/Phrases:** "hello," "hi," "how does this work," "what can you do," "help," "features," "what can you help me with."
@@ -47,12 +55,10 @@ class IntentSpecialist(BaseSpecialist):
 
 * **Classify the intent** as one of the categories above ("search", "info", or "general").
 * **Provide a confidence score** for your classification (a number between 0.0 and 1.0, where 1.0 is highly confident).
-* **Extract relevant terms:**
-    * For **"search"** intent: List the key skills, roles, experience levels, or locations mentioned.
-    * For **"info"** intent: List the candidate's name(s) and the specific information requested.
-* **Give a brief reasoning** for your classification (e.g., "User is asking to find candidates for a specific role and experience level.").
 
-**Be precise and consistent in your classifications.**"""
+**Be precise and consistent in your classifications.**
+
+**CRITICAL: You must ALWAYS respond with valid JSON format only. Do not include any additional text, explanations, or markdown formatting. Return only the JSON object as specified below.**"""
     
     def get_user_prompt_template(self) -> str:
         """Get the user prompt template for intent analysis."""
@@ -60,47 +66,63 @@ class IntentSpecialist(BaseSpecialist):
 
 User Message: "{message}"
 
-Provide your analysis in the following JSON format:
+You must respond with ONLY valid JSON in exactly this format (no other text):
+
 {{
-    "intent": "search|info|general",
-    "confidence": 0.95,
-    "search_query": "extracted terms if applicable",
-    "reasoning": "brief explanation of classification"
-}}"""
+    "intent": "search",
+    "confidence": 0.95
+}}
+
+Where intent is one of: "search", "info", or "general"
+And confidence is a number between 0.0 and 1.0"""
     
     def process_output(self, output: str, **kwargs) -> Dict[str, Any]:
         """Process the intent analysis output."""
         try:
             import json
-            # Try to parse JSON output
-            result = json.loads(output.strip())
+            import re
+            
+            # Clean the output - remove any markdown formatting or extra text
+            cleaned_output = output.strip()
+            
+            # Try to extract JSON from the response using regex if needed
+            json_match = re.search(r'\{[^}]*\}', cleaned_output)
+            if json_match:
+                cleaned_output = json_match.group()
+            
+            # Parse JSON output
+            result = json.loads(cleaned_output)
             
             # Validate and clean the result
-            intent = result.get('intent', 'general').lower()
+            intent = result.get('intent', 'general').lower().strip()
             if intent not in ['search', 'info', 'general']:
                 intent = 'general'
             
-            confidence = float(result.get('confidence', 0.5))
+            confidence = float(result.get('confidence', 0.8))
             confidence = max(0.0, min(1.0, confidence))  # Clamp between 0 and 1
-            
-            search_query = result.get('search_query', '')
-            if intent in ['search', 'info'] and not search_query:
-                search_query = kwargs.get('message', '')
             
             return {
                 'intent': intent,
                 'confidence': confidence,
-                'search_query': search_query,
-                'reasoning': result.get('reasoning', '')
+                'search_query': kwargs.get('message', '') if intent in ['search', 'info'] else '',
+                'reasoning': 'LLM classification successful'
             }
             
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError, AttributeError) as e:
             # Fallback parsing if JSON fails
+            message_lower = kwargs.get('message', '').lower().strip()
             output_lower = output.lower().strip()
-            if any(word in output_lower for word in ['find', 'search', 'looking', 'need', 'show me']):
+            
+            # Check for search intent first
+            search_keywords = ['find', 'search', 'looking', 'need', 'want', 'show me candidates', 'developer', 'developers', 'engineer', 'engineers', 'candidate', 'candidates', 'hire', 'hiring', 'recruit', 'recruiting']
+            if any(word in message_lower for word in search_keywords):
                 intent = 'search'
-            elif any(word in output_lower for word in ['email', 'contact', 'about', 'tell me']):
+            # Check for info intent - person name + specific info request
+            elif any(word in message_lower for word in ['email', 'contact', 'about', 'tell me about', 'education', 'background', 'experience', 'qualifications', 'resume', 'details']) and any(name_indicator in message_lower for name_indicator in ['\'s', 'ronald', 'john', 'sarah', 'mike', 'mary', 'david', 'lam']):
                 intent = 'info'
+            # Check general patterns
+            elif any(word in message_lower for word in ['hello', 'hi', 'help', 'how does', 'what can you']):
+                intent = 'general'
             else:
                 intent = 'general'
             

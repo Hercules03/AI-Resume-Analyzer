@@ -36,7 +36,7 @@ class ResumeProcessor:
         self.experience_extractor = ExperienceExtractor()
         self.yoe_extractor = YoeExtractor()
     
-    def process_resume(self, pdf_file_path: str, development_mode: bool = False) -> Resume:
+    def process_resume(self, pdf_file_path: str, development_mode: bool = False) -> tuple[Resume, str]:
         """
         Process a single resume file using sequential extraction.
         
@@ -45,7 +45,7 @@ class ResumeProcessor:
             development_mode: Whether to show detailed extraction process
             
         Returns:
-            Resume object with all extracted information
+            Tuple of (Resume object with all extracted information, Raw extracted text)
         """
         try:
             # Extract text from the resume
@@ -56,7 +56,7 @@ class ResumeProcessor:
             
             if not extracted_text or len(extracted_text.strip()) < 100:
                 st.warning("Resume text extraction failed or text too short")
-                return self._create_empty_resume(pdf_file_path)
+                return self._create_empty_resume(pdf_file_path), "Text extraction failed"
             
             # Extract first page text for profile extraction (more efficient and focused)
             first_page_text = pdf_processor.extract_first_page_with_pymupdf4llm(pdf_file_path)
@@ -126,8 +126,11 @@ class ResumeProcessor:
                     "experience_count": len(resume.work_experiences),
                     "years_of_experience": resume.YoE,
                 })
+                
+                # Show raw text info
+                st.info(f"**Raw text will be stored**: {len(extracted_text)} characters")
             
-            return resume
+            return resume, extracted_text
             
         except Exception as e:
             if development_mode:
@@ -136,7 +139,7 @@ class ResumeProcessor:
             else:
                 st.error("Resume processing failed. Please try again.")
             
-            return self._create_empty_resume(pdf_file_path)
+            return self._create_empty_resume(pdf_file_path), "Processing failed"
     
     def _process_sequential(self, extracted_text: str, first_page_text: str, development_mode: bool) -> Dict[str, Any]:
         """

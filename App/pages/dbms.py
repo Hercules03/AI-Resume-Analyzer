@@ -147,7 +147,7 @@ def handle_create_records():
             )
             cand_level = st.selectbox(
                 "Experience Level*",
-                ["Entry Level", "Junior Level", "Mid Level", "Senior Level", "Expert Level", "Career Changer"]
+                ["Entry Level", "Junior", "Mid Level", "Senior Level", "Lead/Expert"]
             )
             pdf_name = st.text_input("Resume File Name", placeholder="resume.pdf")
         
@@ -225,13 +225,39 @@ def handle_update_records():
                         state = st.text_input("State", placeholder="NY", value=metadata.get('state', ''))
 
                     with col2:
+                        # Define the full field list
+                        field_options = [
+                            # Technology & Engineering
+                            'Data Science & Analytics', 'Web Development', 'Backend Development', 
+                            'Mobile Development', 'DevOps & Cloud', 'Machine Learning', 'Software Engineering',
+                            'Cybersecurity', 'AI/Artificial Intelligence', 'Blockchain', 'Game Development',
+                            # Business & Management  
+                            'Business Analysis', 'Project Management', 'Product Management', 'Operations Management',
+                            'Human Resources', 'Finance & Accounting', 'Marketing & Advertising', 'Sales',
+                            'Customer Service', 'Business Development', 'Consulting',
+                            # Healthcare & Science
+                            'Healthcare & Medical', 'Nursing', 'Pharmacy', 'Medical Research', 'Biotechnology',
+                            'Chemistry', 'Biology', 'Environmental Science', 'Laboratory Science',
+                            # Creative & Media
+                            'Graphic Design', 'UI/UX Design', 'Content Writing', 'Digital Marketing', 
+                            'Photography', 'Video Production', 'Animation', 'Architecture', 'Interior Design',
+                            # Education & Training
+                            'Education & Teaching', 'Training & Development', 'Academic Research', 'Curriculum Development',
+                            # Legal & Government
+                            'Legal & Law', 'Government & Public Service', 'Policy Analysis', 'Compliance',
+                            # Other Fields
+                            'Manufacturing', 'Supply Chain & Logistics', 'Real Estate', 'Retail', 'Hospitality & Tourism',
+                            'Construction', 'Agriculture', 'Transportation', 'Energy & Utilities', 'Non-Profit',
+                            'General'
+                        ]
+                        
                         reco_field = st.selectbox(
                             "Field",
-                            ["Data Science & Analytics", "Web Development", "Backend Development", 
-                             "Mobile Development", "DevOps & Cloud", "Machine Learning", "General"],
-                            index=0 if metadata.get('reco_field') not in ["Data Science & Analytics", "Web Development", "Backend Development", "Mobile Development", "DevOps & Cloud", "Machine Learning", "General"] 
-                            else ["Data Science & Analytics", "Web Development", "Backend Development", "Mobile Development", "DevOps & Cloud", "Machine Learning", "General"].index(metadata.get('reco_field'))
+                            field_options,
+                            index=0 if metadata.get('reco_field') not in field_options
+                            else field_options.index(metadata.get('reco_field'))
                         )
+                        
                         cand_level = st.selectbox(
                             "Experience Level",
                             ["Entry Level", "Junior", "Mid Level", "Senior Level", "Lead/Expert"],

@@ -265,43 +265,4 @@ def safe_get_nested_value(data: Dict[str, Any], keys: list, default=None):
         return default
 
 
-def calculate_completeness_score(resume_data: Dict[str, Any], 
-                               llm_metadata: Optional[Dict[str, Any]] = None) -> int:
-    """Calculate resume completeness score"""
-    score = 0
-    
-    # Basic information (30 points)
-    if resume_data.get('name'):
-        score += 10
-    if resume_data.get('email'):
-        score += 10
-    if resume_data.get('mobile_number'):
-        score += 10
-    
-    # Skills (20 points)
-    skills = resume_data.get('skills', [])
-    if isinstance(skills, list) and len(skills) > 0:
-        score += 20
-    
-    # LLM-enhanced scoring
-    if llm_metadata:
-        # Work experience (25 points)
-        work_exp = llm_metadata.get('work_experience', [])
-        if work_exp:
-            score += 25
-        
-        # Education (15 points)
-        education = llm_metadata.get('education', [])
-        if education:
-            score += 15
-        
-        # Projects/Certifications (10 points)
-        projects = llm_metadata.get('projects', [])
-        certs = llm_metadata.get('certifications', [])
-        if projects or certs:
-            score += 10
-    else:
-        # Basic scoring without LLM
-        score += 35  # Give some points for basic extraction
-    
-    return min(score, 100)  # Cap at 100 
+ 

@@ -41,21 +41,21 @@ LLM_CONFIG = {
 # Chatbot Specialists Configuration
 SPECIALISTS_CONFIG = {
     'intent_analysis': {
-        'model': 'gemma3:1b',
+        'model': 'gemma3:4b',
         'url': 'http://localhost:11434',
         'temperature': 0.0,  # Deterministic for consistent intent classification
         'num_predict': 200,
         'timeout': 30
     },
     'name_extraction': {
-        'model': 'gemma3:1b',
+        'model': 'gemma3:4b',
         'url': 'http://localhost:11434',
         'temperature': 0.0,  # Deterministic for accurate name extraction
         'num_predict': 50,
         'timeout': 30
     },
     'query_enhancement': {
-        'model': 'gemma3:1b',
+        'model': 'gemma3:4b',
         'url': 'http://localhost:11434',
         'temperature': 0.2,  # Slight creativity for query expansion
         'num_predict': 300,
@@ -67,6 +67,27 @@ SPECIALISTS_CONFIG = {
         'temperature': 0.3,  # More conversational
         'num_predict': 4096,
         'timeout': 60
+    },
+    'search_response': {
+        'model': 'gemma3:12b',  # Larger model for detailed search responses
+        'url': 'http://localhost:11434',
+        'temperature': 0.2,  # Structured but professional
+        'num_predict': 4096,
+        'timeout': 60
+    },
+    'info_response': {
+        'model': 'gemma3:12b',  # Larger model for detailed candidate information
+        'url': 'http://localhost:11434',
+        'temperature': 0.2,  # Structured but professional
+        'num_predict': 4096,
+        'timeout': 60
+    },
+    'general_response': {
+        'model': 'gemma3:12b',  # Medium model for general conversation
+        'url': 'http://localhost:11434',
+        'temperature': 0.4,  # More conversational and friendly
+        'num_predict': 2048,
+        'timeout': 45
     }
 }
 

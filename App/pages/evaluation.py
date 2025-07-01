@@ -10,6 +10,8 @@ from llm_utils import export_metadata_to_json
 from config import PAGE_CONFIG, LLM_CONFIG
 from utils import get_system_info, get_location_info, generate_security_token, validate_file_upload, show_pdf, get_current_timestamp
 from resume_processor import ResumeProcessor
+from analyzers import CareerTransitionAnalyzer, FieldCareerLevelAnalyzer, ExperienceRelevanceAnalyzer
+
 import time
 from database import db_manager
 
@@ -32,11 +34,13 @@ sec_token = generate_security_token()
 st.markdown('''<h5 style='text-align: left; color: #021659;'> Upload Candidate Resume for Evaluation</h5>''', unsafe_allow_html=True)
 
 # Debug mode toggle
-debug_mode = st.checkbox(
-    "🐛 Debug Mode - Show Raw LLM Prompts & Responses", 
-    value=False,
-    help="Enable this to see the exact prompts sent to the LLM and the raw responses received during resume processing"
-)
+debug_mode = False
+
+#st.checkbox(
+   #"🐛 Debug Mode - Show Raw LLM Prompts & Responses", 
+    #value=False,
+    #help="Enable this to see the exact prompts sent to the LLM and the raw responses received during resume processing"
+#)
 
 if debug_mode:
     st.info("**Debug Mode Enabled**: You will see detailed LLM interactions including prompts and raw responses for each extraction step.")
@@ -107,120 +111,246 @@ def _create_tagged_resume_text(resume):
     return " || ".join(tagged_sections)
 
 def _extract_career_transitions(work_experiences):
-    """Extract career transition history to understand candidate's journey."""
+    """Extract career transition history using LLM-powered analysis."""
+    from analyzers import CareerTransitionAnalyzer
     
     if not work_experiences or len(work_experiences) < 2:
         return "No transitions detected"
     
-    transitions = []
-    fields = []
+    # Create a mock resume object with work experiences
+    class MockResume:
+        def __init__(self, work_experiences):
+            self.work_experiences = work_experiences
     
-    for exp in work_experiences:
-        # Determine field for each experience
-        exp_field = "General"
-        if exp.job_title:
-            title_lower = exp.job_title.lower()
-            if any(keyword in title_lower for keyword in ['data', 'analyst', 'scientist']):
-                exp_field = "Data Science & Analytics"
-            elif any(keyword in title_lower for keyword in ['developer', 'engineer', 'programmer']):
-                exp_field = "Software Development"
-            elif any(keyword in title_lower for keyword in ['sales', 'marketing', 'business']):
-                exp_field = "Business"
-            elif any(keyword in title_lower for keyword in ['manager', 'director', 'lead']):
-                exp_field = "Management"
-        
-        fields.append(exp_field)
+    mock_resume = MockResume(work_experiences)
+    analyzer = CareerTransitionAnalyzer()
     
-    # Identify transitions
-    for i in range(1, len(fields)):
-        if fields[i] != fields[i-1]:
-            transitions.append(f"{fields[i-1]} → {fields[i]}")
-    
-    return "; ".join(transitions) if transitions else "No field transitions"
+    try:
+        result = analyzer.analyze(mock_resume)
+        transitions = result.get('transitions', 'No transitions detected')
+        return transitions
+    except Exception as e:
+        # Fallback to simple analysis if LLM fails
+        st.warning(f"LLM analysis failed, using basic analysis: {e}")
+        return "Career transition analysis unavailable"
 
 def _calculate_field_specific_career_level(resume, target_field):
-    """Calculate career level specific to the target field, accounting for career transitions."""
+    """Calculate career level specific to target field using LLM analysis."""
+    from analyzers import FieldCareerLevelAnalyzer
     
     if not resume.work_experiences:
         return "Entry Level"
     
-    # Calculate field-specific experience
-    field_experience_months = 0
-    total_experience_months = 0
+    analyzer = FieldCareerLevelAnalyzer()
     
-    for exp in resume.work_experiences:
-        # Extract duration in months (simplified)
-        months = _extract_months_from_duration(exp.duration) if exp.duration else 12  # Default 1 year if no duration
-        total_experience_months += months
-        
-        # Check if this experience is relevant to target field
-        if _is_experience_relevant_to_field(exp, target_field):
-            field_experience_months += months
-    
-    field_experience_years = field_experience_months / 12
-    total_experience_years = total_experience_months / 12
-    
-    # Field-specific career level determination
-    if field_experience_years < 1:
-        return "Entry Level" if total_experience_years < 3 else "Career Changer"
-    elif field_experience_years < 3:
-        return "Junior Level"
-    elif field_experience_years < 6:
-        return "Mid Level"
-    elif field_experience_years < 10:
-        return "Senior Level"
-    else:
-        return "Expert Level"
+    try:
+        result = analyzer.analyze(resume, target_field=target_field)
+        career_level = result.get('field_career_level', 'Entry Level')
+        return career_level
+    except Exception as e:
+        # Fallback to basic analysis if LLM fails
+        st.warning(f"LLM analysis failed, using basic analysis: {e}")
+        return "Career level analysis unavailable"
 
 def _is_experience_relevant_to_field(experience, target_field):
-    """Determine if work experience is relevant to the target field."""
+    """Determine if work experience is relevant to target field using LLM analysis."""
+    from analyzers import ExperienceRelevanceAnalyzer
     
     if not experience.job_title and not experience.responsibilities and not experience.technologies:
         return False
     
+    analyzer = ExperienceRelevanceAnalyzer()
+    
+    try:
+        result = analyzer.analyze(experience, target_field=target_field)
+        relevance_score = result.get('relevance_score', 0)
+        return relevance_score >= 5  # Consider score of 5+ as relevant
+    except Exception as e:
+        # Fallback to basic keyword matching if LLM fails
+        return _basic_keyword_relevance_check(experience, target_field)
+    
+def _basic_keyword_relevance_check(experience, target_field):
+    """Fallback keyword-based relevance check for all business domains."""
     # Combine all text for analysis
     exp_text = f"{experience.job_title or ''} {' '.join(experience.responsibilities or [])} {' '.join(experience.technologies or [])}".lower()
     
     field_keywords = {
-        "Data Science & Analytics": ['data', 'analytics', 'scientist', 'analyst', 'machine learning', 'python', 'sql', 'tableau', 'pandas', 'numpy'],
-        "Web Development": ['web', 'frontend', 'javascript', 'react', 'html', 'css', 'vue', 'angular', 'web developer'],
-        "Backend Development": ['backend', 'api', 'server', 'java', 'python', 'node.js', 'spring', 'django', 'flask'],
-        "Mobile Development": ['mobile', 'android', 'ios', 'swift', 'kotlin', 'app', 'react native', 'flutter'],
-        "DevOps & Cloud": ['devops', 'cloud', 'aws', 'docker', 'kubernetes', 'jenkins', 'terraform', 'infrastructure'],
-        "Machine Learning": ['machine learning', 'ml', 'ai', 'tensorflow', 'pytorch', 'deep learning', 'neural network']
+        # Technology Fields
+        "Data Science & Analytics": ['data', 'analytics', 'scientist', 'analyst', 'machine learning', 'python', 'sql', 'tableau', 'pandas', 'numpy', 'statistics', 'modeling'],
+        "Web Development": ['web', 'frontend', 'javascript', 'react', 'html', 'css', 'vue', 'angular', 'web developer', 'ui', 'ux'],
+        "Backend Development": ['backend', 'api', 'server', 'java', 'python', 'node.js', 'spring', 'django', 'flask', 'database'],
+        "Mobile Development": ['mobile', 'android', 'ios', 'swift', 'kotlin', 'app', 'react native', 'flutter', 'xamarin'],
+        "DevOps & Cloud": ['devops', 'cloud', 'aws', 'docker', 'kubernetes', 'jenkins', 'terraform', 'infrastructure', 'ci/cd'],
+        "Machine Learning": ['machine learning', 'ml', 'ai', 'tensorflow', 'pytorch', 'deep learning', 'neural network', 'nlp'],
+        "Cybersecurity": ['security', 'cybersecurity', 'penetration', 'vulnerability', 'firewall', 'encryption', 'compliance'],
+        "Software Engineering": ['software', 'developer', 'programming', 'code', 'development', 'engineer', 'application'],
+        
+        # Healthcare Fields
+        "Healthcare Administration": ['healthcare', 'hospital', 'medical', 'administration', 'health system', 'patient care', 'clinical'],
+        "Nursing": ['nurse', 'nursing', 'patient care', 'medical', 'clinical', 'healthcare', 'rn', 'lpn'],
+        "Medical Practice": ['doctor', 'physician', 'medical', 'clinical', 'patient', 'diagnosis', 'treatment', 'medicine'],
+        "Pharmaceuticals": ['pharmaceutical', 'drug', 'medicine', 'clinical trial', 'research', 'fda', 'regulatory'],
+        
+        # Finance & Banking
+        "Investment Banking": ['investment', 'banking', 'financial', 'equity', 'debt', 'ipo', 'mergers', 'acquisitions'],
+        "Financial Analysis": ['financial', 'analysis', 'budget', 'forecast', 'modeling', 'excel', 'accounting', 'finance'],
+        "Accounting": ['accounting', 'bookkeeping', 'audit', 'tax', 'gaap', 'financial statements', 'cpa'],
+        "Insurance": ['insurance', 'claims', 'underwriting', 'risk assessment', 'actuarial', 'policy'],
+        "Risk Management": ['risk', 'compliance', 'audit', 'regulatory', 'governance', 'control'],
+        
+        # Marketing & Sales
+        "Digital Marketing": ['marketing', 'digital', 'seo', 'sem', 'social media', 'content', 'campaigns', 'analytics'],
+        "Sales Management": ['sales', 'business development', 'account management', 'revenue', 'quota', 'crm'],
+        "Brand Management": ['brand', 'marketing', 'advertising', 'positioning', 'campaign', 'creative'],
+        "Market Research": ['research', 'market', 'survey', 'analysis', 'consumer', 'insights', 'data'],
+        "Public Relations": ['pr', 'public relations', 'media', 'communications', 'press', 'reputation'],
+        
+        # Operations & Supply Chain
+        "Operations Management": ['operations', 'process', 'efficiency', 'improvement', 'lean', 'six sigma', 'production'],
+        "Logistics": ['logistics', 'supply chain', 'warehouse', 'shipping', 'distribution', 'inventory'],
+        "Manufacturing": ['manufacturing', 'production', 'quality', 'assembly', 'factory', 'industrial'],
+        "Quality Assurance": ['quality', 'testing', 'inspection', 'standards', 'iso', 'compliance'],
+        
+        # Human Resources
+        "Talent Acquisition": ['recruiting', 'talent', 'hiring', 'hr', 'recruitment', 'staffing', 'sourcing'],
+        "HR Business Partnering": ['hr', 'human resources', 'employee relations', 'performance', 'development'],
+        "Compensation & Benefits": ['compensation', 'benefits', 'payroll', 'salary', 'rewards', 'hr'],
+        "Training & Development": ['training', 'development', 'learning', 'education', 'coaching', 'mentoring'],
+        
+        # Legal
+        "Corporate Law": ['legal', 'law', 'attorney', 'lawyer', 'corporate', 'contracts', 'compliance'],
+        "Litigation": ['litigation', 'court', 'trial', 'legal', 'dispute', 'attorney', 'law'],
+        "Compliance": ['compliance', 'regulatory', 'audit', 'legal', 'governance', 'risk'],
+        "Paralegal": ['paralegal', 'legal', 'research', 'documentation', 'court', 'law'],
+        
+        # Education
+        "Teaching": ['teacher', 'teaching', 'education', 'classroom', 'curriculum', 'instruction', 'student'],
+        "Educational Administration": ['education', 'administration', 'school', 'academic', 'principal', 'dean'],
+        "Curriculum Development": ['curriculum', 'education', 'instructional design', 'learning', 'academic'],
+        
+        # Consulting
+        "Management Consulting": ['consulting', 'strategy', 'management', 'advisory', 'business analysis'],
+        "Strategy": ['strategy', 'strategic', 'planning', 'consulting', 'analysis', 'business'],
+        "Business Analysis": ['business analyst', 'analysis', 'requirements', 'process', 'systems'],
+        
+        # Government & Public Service
+        "Public Administration": ['government', 'public', 'administration', 'policy', 'municipal', 'federal'],
+        "Policy Development": ['policy', 'government', 'regulatory', 'public', 'legislation'],
+        
+        # Non-Profit
+        "Program Management": ['program', 'non-profit', 'nonprofit', 'community', 'social', 'outreach'],
+        "Fundraising": ['fundraising', 'development', 'donations', 'grants', 'non-profit', 'charity'],
+        
+        # Real Estate
+        "Property Management": ['property', 'real estate', 'leasing', 'rental', 'maintenance', 'tenant'],
+        "Real Estate Development": ['real estate', 'development', 'construction', 'property', 'investment'],
+        
+        # Media & Communications
+        "Journalism": ['journalism', 'reporter', 'news', 'media', 'writing', 'editor'],
+        "Content Creation": ['content', 'writing', 'creative', 'media', 'digital', 'social'],
+        "Broadcasting": ['broadcasting', 'television', 'radio', 'media', 'production'],
+        
+        # Retail & Consumer
+        "Retail Management": ['retail', 'store', 'customer service', 'sales', 'merchandise', 'management'],
+        "Merchandising": ['merchandising', 'retail', 'product', 'display', 'inventory', 'buying'],
+        "Customer Experience": ['customer', 'service', 'experience', 'satisfaction', 'support', 'relations'],
+        
+        # Energy & Utilities
+        "Energy Management": ['energy', 'utilities', 'power', 'renewable', 'grid', 'sustainability'],
+        "Environmental Services": ['environmental', 'sustainability', 'green', 'conservation', 'climate'],
+        
+        # Construction & Engineering
+        "Civil Engineering": ['civil', 'engineering', 'construction', 'infrastructure', 'design', 'project'],
+        "Project Management": ['project management', 'pmp', 'agile', 'scrum', 'planning', 'coordination'],
+        "Architecture": ['architecture', 'design', 'building', 'construction', 'planning', 'cad']
     }
     
     keywords = field_keywords.get(target_field, [])
     return any(keyword in exp_text for keyword in keywords)
 
 def _extract_months_from_duration(duration_str):
-    """Extract months from duration string."""
+    """Extract months from duration string, handling various formats properly."""
     if not duration_str:
         return 12
     
-    duration_lower = duration_str.lower()
+    duration_lower = duration_str.lower().strip()
     
-    # Extract numbers from the string
     import re
+    
+    # First, check for explicit year/month patterns
+    # Pattern: "X years Y months" or "X year Y month"
+    year_month_pattern = r'(\d+)\s*(?:years?|yrs?)\s*(?:and\s*)?(?:(\d+)\s*(?:months?|mos?))?'
+    match = re.search(year_month_pattern, duration_lower)
+    if match:
+        years = int(match.group(1))
+        months = int(match.group(2)) if match.group(2) else 0
+        return years * 12 + months
+    
+    # Pattern: "X months Y days" or just "X months"
+    month_pattern = r'(\d+)\s*(?:months?|mos?)'
+    match = re.search(month_pattern, duration_lower)
+    if match:
+        months = int(match.group(1))
+        return months
+    
+    # Pattern: "X years" only
+    year_pattern = r'(\d+)\s*(?:years?|yrs?)'
+    match = re.search(year_pattern, duration_lower)
+    if match:
+        years = int(match.group(1))
+        return years * 12
+    
+    # Handle date range patterns like "Jan 2020 - Dec 2022" or "2020-2023"
+    date_range_patterns = [
+        r'(\w+\s+\d{4})\s*[-–—to]\s*(\w+\s+\d{4})',  # "Jan 2020 - Dec 2022"
+        r'(\d{1,2}/\d{4})\s*[-–—to]\s*(\d{1,2}/\d{4})',  # "01/2020 - 12/2022"
+        r'(\d{4})\s*[-–—to]\s*(\d{4})',  # "2020-2023"
+        r'(\d{4})\s*[-–—to]\s*present',  # "2020-Present"
+    ]
+    
+    for pattern in date_range_patterns:
+        match = re.search(pattern, duration_lower)
+        if match:
+            start_str = match.group(1)
+            end_str = match.group(2) if len(match.groups()) > 1 else "present"
+            
+            # Parse years from the date range
+            start_year_match = re.search(r'\d{4}', start_str)
+            if end_str == "present":
+                from datetime import datetime
+                end_year = datetime.now().year
+            else:
+                end_year_match = re.search(r'\d{4}', end_str)
+                end_year = int(end_year_match.group()) if end_year_match else None
+            
+            if start_year_match and end_year:
+                start_year = int(start_year_match.group())
+                years_diff = max(0, end_year - start_year)
+                return years_diff * 12
+    
+    # Fallback: look for standalone numbers with context clues
     numbers = re.findall(r'\d+', duration_lower)
+    if numbers:
+        # Filter out obviously wrong numbers (like years 2020+)
+        valid_numbers = [int(n) for n in numbers if int(n) < 2000]
+        
+        if valid_numbers:
+            value = valid_numbers[0]
+            
+            # Use context to determine if it's years or months
+            if any(keyword in duration_lower for keyword in ['year', 'yr', 'yrs']):
+                return min(value * 12, 600)  # Cap at 50 years max
+            elif any(keyword in duration_lower for keyword in ['month', 'mon', 'mos']):
+                return min(value, 600)  # Cap at 50 years max
+            else:
+                # If no clear indicator, be conservative
+                if value <= 12:
+                    return value * 12  # Assume years for small numbers
+                else:
+                    return min(value, 600)  # Assume months for larger numbers, with cap
     
-    if not numbers:
-        return 12  # Default to 1 year if no numbers found
-    
-    # Get the first number found
-    value = int(numbers[0])
-    
-    # Determine if it's years or months based on keywords
-    if any(keyword in duration_lower for keyword in ['year', 'yr', 'yrs']):
-        return value * 12  # Convert years to months
-    elif any(keyword in duration_lower for keyword in ['month', 'mon', 'mos']):
-        return value
-    else:
-        # If no clear indicator, assume months if value > 12, otherwise years
-        if value > 12:
-            return value  # Assume months
-        else:
-            return value * 12  # Assume years
+    # Default fallback
+    return 12
 
 ## File upload in PDF format
 pdf_file = st.file_uploader("Choose your Resume", type=["pdf"])
@@ -549,25 +679,96 @@ def display_resume_results(resume, dev_mode=False):
             help="Download in legacy format for compatibility"
         )
 
-def prepare_user_data_from_resume(resume, system_info, location_info, sec_token, pdf_name):
-    """Prepare user data from Resume object for database insertion with field-specific career analysis."""
+def prepare_user_data_from_resume(resume, system_info, location_info, sec_token, pdf_name, raw_resume_text=None):
+    """Prepare user data from Resume object for database insertion with field-specific career analysis and raw text."""
     
     # Use AI-extracted field, with intelligent fallbacks
     reco_field = resume.primary_field or "General"
     
-    # Improved field determination if AI extraction failed
+    # Comprehensive field determination if AI extraction failed
     if reco_field == "General" and resume.skills:
         skills_str = " ".join(resume.skills).lower()
-        if any(skill in skills_str for skill in ['python', 'data', 'machine learning', 'analytics', 'sql', 'tableau', 'pandas']):
+        job_title = (resume.work_experiences[0].job_title if resume.work_experiences else "").lower()
+        
+        # Technology & Engineering
+        if any(skill in skills_str for skill in ['python', 'data science', 'machine learning', 'analytics', 'sql', 'tableau', 'pandas', 'numpy', 'scikit-learn']):
             reco_field = "Data Science & Analytics"
-        elif any(skill in skills_str for skill in ['javascript', 'react', 'web', 'frontend', 'html', 'css', 'vue', 'angular']):
+        elif any(skill in skills_str for skill in ['javascript', 'react', 'web', 'frontend', 'html', 'css', 'vue', 'angular', 'jquery']):
             reco_field = "Web Development"
-        elif any(skill in skills_str for skill in ['java', 'backend', 'api', 'spring', 'django', 'flask', 'node.js']):
+        elif any(skill in skills_str for skill in ['java', 'backend', 'api', 'spring', 'django', 'flask', 'node.js', 'express', 'microservices']):
             reco_field = "Backend Development"
-        elif any(skill in skills_str for skill in ['mobile', 'android', 'ios', 'swift', 'kotlin', 'react native']):
+        elif any(skill in skills_str for skill in ['mobile', 'android', 'ios', 'swift', 'kotlin', 'react native', 'flutter', 'xamarin']):
             reco_field = "Mobile Development"
-        elif any(skill in skills_str for skill in ['aws', 'docker', 'kubernetes', 'devops', 'jenkins', 'terraform']):
+        elif any(skill in skills_str for skill in ['aws', 'docker', 'kubernetes', 'devops', 'jenkins', 'terraform', 'ansible', 'ci/cd']):
             reco_field = "DevOps & Cloud"
+        elif any(skill in skills_str for skill in ['ai', 'artificial intelligence', 'deep learning', 'neural networks', 'tensorflow', 'pytorch']):
+            reco_field = "AI/Artificial Intelligence"
+        elif any(skill in skills_str for skill in ['cybersecurity', 'security', 'penetration testing', 'ethical hacking', 'firewall', 'encryption']):
+            reco_field = "Cybersecurity"
+        elif any(skill in skills_str for skill in ['blockchain', 'cryptocurrency', 'smart contracts', 'ethereum', 'solidity', 'web3']):
+            reco_field = "Blockchain"
+        elif any(skill in skills_str for skill in ['game development', 'unity', 'unreal engine', 'game design', 'c#', 'gamedev']):
+            reco_field = "Game Development"
+        
+        # Business & Management
+        elif any(skill in skills_str for skill in ['business analysis', 'requirements gathering', 'process improvement', 'stakeholder management']):
+            reco_field = "Business Analysis"
+        elif any(skill in skills_str for skill in ['project management', 'agile', 'scrum', 'pmp', 'kanban', 'jira']) or 'project manager' in job_title:
+            reco_field = "Project Management"
+        elif any(skill in skills_str for skill in ['product management', 'product strategy', 'roadmap', 'user stories']) or 'product manager' in job_title:
+            reco_field = "Product Management"
+        elif any(skill in skills_str for skill in ['human resources', 'hr', 'recruitment', 'talent acquisition', 'employee relations']):
+            reco_field = "Human Resources"
+        elif any(skill in skills_str for skill in ['accounting', 'financial analysis', 'finance', 'bookkeeping', 'audit', 'tax']):
+            reco_field = "Finance & Accounting"
+        elif any(skill in skills_str for skill in ['marketing', 'digital marketing', 'content marketing', 'brand management', 'seo', 'sem']):
+            reco_field = "Marketing & Advertising"
+        elif any(skill in skills_str for skill in ['sales', 'business development', 'lead generation', 'crm', 'salesforce']):
+            reco_field = "Sales"
+        elif any(skill in skills_str for skill in ['customer service', 'customer support', 'help desk', 'client relations']):
+            reco_field = "Customer Service"
+        
+        # Healthcare & Science
+        elif any(skill in skills_str for skill in ['nursing', 'patient care', 'medical', 'healthcare', 'clinical']):
+            reco_field = "Healthcare & Medical"
+        elif any(skill in skills_str for skill in ['pharmacy', 'pharmaceutical', 'drug development', 'clinical trials']):
+            reco_field = "Pharmacy"
+        elif any(skill in skills_str for skill in ['laboratory', 'lab', 'research', 'biotechnology', 'biology', 'chemistry']):
+            reco_field = "Laboratory Science"
+        
+        # Creative & Media
+        elif any(skill in skills_str for skill in ['graphic design', 'photoshop', 'illustrator', 'design', 'visual design']):
+            reco_field = "Graphic Design"
+        elif any(skill in skills_str for skill in ['ui/ux', 'user experience', 'user interface', 'figma', 'sketch']):
+            reco_field = "UI/UX Design"
+        elif any(skill in skills_str for skill in ['content writing', 'copywriting', 'writing', 'content creation', 'blogging']):
+            reco_field = "Content Writing"
+        elif any(skill in skills_str for skill in ['photography', 'photo editing', 'camera', 'video production', 'editing']):
+            reco_field = "Photography"
+        elif any(skill in skills_str for skill in ['architecture', 'autocad', 'architectural design', 'building design']):
+            reco_field = "Architecture"
+        
+        # Education & Training
+        elif any(skill in skills_str for skill in ['teaching', 'education', 'curriculum', 'training', 'instructor']) or 'teacher' in job_title:
+            reco_field = "Education & Teaching"
+        
+        # Legal & Government
+        elif any(skill in skills_str for skill in ['legal', 'law', 'attorney', 'lawyer', 'paralegal', 'litigation']):
+            reco_field = "Legal & Law"
+        elif any(skill in skills_str for skill in ['government', 'public service', 'policy', 'administration']):
+            reco_field = "Government & Public Service"
+        
+        # Other Fields
+        elif any(skill in skills_str for skill in ['manufacturing', 'production', 'quality control', 'lean', 'six sigma']):
+            reco_field = "Manufacturing"
+        elif any(skill in skills_str for skill in ['supply chain', 'logistics', 'procurement', 'inventory', 'warehouse']):
+            reco_field = "Supply Chain & Logistics"
+        elif any(skill in skills_str for skill in ['real estate', 'property management', 'real estate agent', 'broker']):
+            reco_field = "Real Estate"
+        elif any(skill in skills_str for skill in ['retail', 'sales associate', 'merchandising', 'store management']):
+            reco_field = "Retail"
+        elif any(skill in skills_str for skill in ['hospitality', 'hotel', 'restaurant', 'tourism', 'food service']):
+            reco_field = "Hospitality & Tourism"
     
     # IMPROVED: Field-specific career level analysis
     cand_level = _calculate_field_specific_career_level(resume, reco_field)
@@ -587,6 +788,8 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
                 exp_text += f". Technologies: {', '.join(exp.technologies)}"
             work_exp_details.append(exp_text)
     
+    print(f"Working Experience Details: {work_exp_details}")
+    print("-"*50)
     # Prepare education details
     education_details = []
     if resume.educations:
@@ -599,6 +802,8 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
             if edu.gpa:
                 edu_text += f", GPA: {edu.gpa}"
             education_details.append(edu_text)
+    print(f"Education Details: {education_details}")
+    print("-"*50)
     
     # Create comprehensive resume summary for searchability
     full_resume_summary = []
@@ -614,6 +819,17 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
         full_resume_summary.append(f"GitHub: {resume.github}")
     if resume.portfolio:
         full_resume_summary.append(f"Portfolio: {resume.portfolio}")
+    
+    print(f"Full Resume Summary: {full_resume_summary}")
+    print("-"*50)
+    
+    # Debug info for raw text
+    if raw_resume_text:
+        print(f"Raw Resume Text Length: {len(raw_resume_text)} characters")
+        print(f"Raw Resume Text Preview: {raw_resume_text[:200]}...")
+    else:
+        print("No raw resume text provided")
+    print("-"*50)
     
     return {
         'sec_token': sec_token,
@@ -646,7 +862,10 @@ def prepare_user_data_from_resume(resume, system_info, location_info, sec_token,
         'full_resume_data': "; ".join(full_resume_summary),
         # Metadata tags for robust searching
         'extracted_text': _create_tagged_resume_text(resume),
-        'contact_info': f"{resume.email or ''} | {resume.contact_number or ''} | {resume.linkedin or ''} | {resume.github or ''}"
+        'contact_info': f"{resume.email or ''} | {resume.contact_number or ''} | {resume.linkedin or ''} | {resume.github or ''}",
+        
+        # NEW: Raw resume text for comprehensive chatbot context
+        'raw_resume_text': raw_resume_text or 'Not available'
     }
 
 
@@ -734,7 +953,7 @@ if pdf_file is not None:
                         st.write("• **Top P**: Nucleus sampling threshold")
                         st.write("• **Timeout**: Request timeout in seconds")
                 
-                resume = resume_processor.process_resume(save_image_path, debug_mode)
+                resume, raw_extracted_text = resume_processor.process_resume(save_image_path, debug_mode)
 
                 if resume and resume.name != "Unknown":
                     
@@ -766,13 +985,19 @@ if pdf_file is not None:
                             "Education Count": len(resume.educations)
                         }
                         st.json(debug_summary)
+                        
+                        # Show raw text information
+                        st.markdown("**Raw Text Information:**")
+                        st.info(f"Raw text captured: {len(raw_extracted_text)} characters")
+                        with st.expander("Raw Text Preview (First 500 chars)"):
+                            st.text(raw_extracted_text[:500] + "..." if len(raw_extracted_text) > 500 else raw_extracted_text)
 
                     # Display result in a structured way
                     display_resume_results(resume, debug_mode)
 
-                    # Prepare data for database
+                    # Prepare data for database with raw text
                     user_data = prepare_user_data_from_resume(
-                        resume, system_info, location_info, sec_token, pdf_name
+                        resume, system_info, location_info, sec_token, pdf_name, raw_extracted_text
                     )
 
                     # Insert into ChromaDB vector database

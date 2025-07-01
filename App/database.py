@@ -114,7 +114,9 @@ class VectorDatabaseManager:
                 'primary_field': str(data.get('primary_field', '')),
                 'full_resume_data': str(data.get('full_resume_data', '')),
                 'extracted_text': str(data.get('extracted_text', '')),
-                'contact_info': str(data.get('contact_info', ''))
+                'contact_info': str(data.get('contact_info', '')),
+                # NEW: Raw resume text for comprehensive chatbot context
+                'raw_resume_text': str(data.get('raw_resume_text', 'Not available'))
             }
             
             # Add to collection with enhanced embedding
@@ -275,7 +277,7 @@ class VectorDatabaseManager:
             return 0
     
     def semantic_search_resumes(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
-        """Perform semantic search on resume data - NEW FEATURE for LLM integration"""
+        """Perform semantic search on resume data with improved similarity scoring"""
         try:
             results = self.resume_collection.query(
                 query_texts=[query],
@@ -285,13 +287,43 @@ class VectorDatabaseManager:
             
             search_results = []
             if results['documents'] and results['documents'][0]:
+                distances = results['distances'][0]
+                
+                # Handle edge case: if only negative similarities, normalize to positive range
+                all_negative = all(dist > 1 for dist in distances)
+                
                 for i in range(len(results['documents'][0])):
+                    distance = distances[i]
+                    
+                    if all_negative and len(distances) > 1:
+                        # When all matches are poor, use relative ranking
+                        # Convert to 0-100 scale where best match gets highest score
+                        max_dist = max(distances)
+                        min_dist = min(distances)
+                        if max_dist != min_dist:
+                            # Normalize: best (lowest distance) gets ~80%, worst gets ~20%
+                            normalized = 20 + (60 * (max_dist - distance) / (max_dist - min_dist))
+                            similarity_score = normalized / 100
+                        else:
+                            # All distances equal, give moderate score
+                            similarity_score = 0.5
+                    elif distance <= 1:
+                        # Normal case: convert distance to similarity (0-1 range)
+                        similarity_score = 1 - distance
+                    else:
+                        # Single poor match or distance > 1: cap at very low positive score
+                        similarity_score = max(0.05, 1 / (1 + distance))  # Minimum 5% similarity
+                    
                     result = {
                         'document': results['documents'][0][i],
                         'metadata': results['metadatas'][0][i],
-                        'similarity_score': 1 - results['distances'][0][i]  # Convert distance to similarity
+                        'similarity_score': similarity_score,
+                        'raw_distance': distance  # Keep original distance for debugging
                     }
                     search_results.append(result)
+                
+                # Sort by similarity score (highest first)
+                search_results.sort(key=lambda x: x['similarity_score'], reverse=True)
             
             return search_results
             
@@ -402,7 +434,9 @@ class VectorDatabaseManager:
                 'full_resume_data': str(new_data.get('full_resume_data', '')),
                 'extracted_text': str(new_data.get('extracted_text', '')),
                 'contact_info': str(new_data.get('contact_info', '')),
-                'updated_at': datetime.now().isoformat()
+                'updated_at': datetime.now().isoformat(),
+                # NEW: Raw resume text for comprehensive chatbot context
+                'raw_resume_text': str(new_data.get('raw_resume_text', 'Not available'))
             }
             
             # Re-add with same ID
@@ -419,16 +453,20 @@ class VectorDatabaseManager:
             return False
     
     def _create_enhanced_document_content(self, data: Dict[str, Any]) -> str:
-        """Create enhanced document content using tagged metadata approach"""
+        """Create enhanced document content using raw text when available for best embeddings"""
         
-        # Use the tagged extracted text as the primary document content
-        extracted_text = data.get('extracted_text', '')
-        if extracted_text:
-            # The tagged text already contains structured metadata
-            base_content = extracted_text
+        # PRIORITY 1: Use raw resume text if available (best for embeddings and LLM context)
+        raw_text = data.get('raw_resume_text', '')
+        if raw_text and raw_text != 'Not available':
+            base_content = raw_text
         else:
-            # Fallback to basic content creation
-            base_content = self._create_basic_document_content(data)
+            # PRIORITY 2: Use the tagged extracted text as secondary option
+            extracted_text = data.get('extracted_text', '')
+            if extracted_text:
+                base_content = extracted_text
+            else:
+                # PRIORITY 3: Fallback to basic content creation
+                base_content = self._create_basic_document_content(data)
         
         # Add contextual information for better embeddings
         context_parts = []
@@ -692,7 +730,9 @@ class VectorDatabaseManager:
                 'act_name': str(data.get('act_name', 'MANUAL_ENTRY')),
                 'act_mail': str(data.get('act_mail', 'manual@system.com')),
                 'act_mob': str(data.get('act_mob', 'N/A')),
-                'no_of_pages': str(data.get('no_of_pages', '1'))
+                'no_of_pages': str(data.get('no_of_pages', '1')),
+                # NEW: Raw resume text for comprehensive chatbot context
+                'raw_resume_text': str(data.get('raw_resume_text', 'Not available'))
             }
             
             # Add to collection

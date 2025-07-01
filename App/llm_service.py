@@ -31,7 +31,10 @@ class LLMService:
     def _initialize_llm(self):
         """Initialize the Ollama LLM connection."""
         if not LANGCHAIN_AVAILABLE:
-            st.error("LangChain not available. Please install: pip install langchain langchain-ollama")
+            try:
+                st.error("LangChain not available. Please install: pip install langchain langchain-ollama")
+            except:
+                print("LangChain not available. Please install: pip install langchain langchain-ollama")
             return False
         
         try:
@@ -48,7 +51,10 @@ class LLMService:
             return True
                 
         except Exception as e:
-            st.error(f"Failed to initialize LLM: {str(e)}")
+            try:
+                st.error(f"Failed to initialize LLM: {str(e)}")
+            except:
+                print(f"Failed to initialize LLM: {str(e)}")
             return False
     
     def _test_connection(self):
@@ -63,11 +69,17 @@ class LLMService:
                 self.connection_tested = True
                 return True
             else:
-                st.error("LLM connection test failed - no response")
+                try:
+                    st.error("LLM connection test failed - no response")
+                except:
+                    print("LLM connection test failed - no response")
                 return False
                 
         except Exception as e:
-            st.error(f"LLM connection test failed: {str(e)}")
+            try:
+                st.error(f"LLM connection test failed: {str(e)}")
+            except:
+                print(f"LLM connection test failed: {str(e)}")
             return False
     
     def extract_with_llm(
@@ -93,13 +105,19 @@ class LLMService:
         """
         if not self.llm:
             if development_mode:
-                st.error("LLM not initialized")
+                try:
+                    st.error("LLM not initialized")
+                except:
+                    print("LLM not initialized")
             return {model.__name__.lower(): model().model_dump()}
         
         # Test connection if not already done
         if not self._test_connection():
             if development_mode:
-                st.error("LLM connection failed")
+                try:
+                    st.error("LLM connection failed")
+                except:
+                    print("LLM connection failed")
             return {model.__name__.lower(): model().model_dump()}
         
         try:
@@ -117,45 +135,57 @@ class LLMService:
             formatted_prompt = prompt.format(**input_data)
             
             if development_mode:
-                with st.expander(f"🔧 LLM Configuration for {model.__name__}"):
-                    config_details = {
-                        "Extractor": model.__name__,
-                        "Model": self.model_name,
-                        "Base URL": self.base_url,
-                        "Temperature": self.llm.temperature,
-                        "Max Tokens (num_predict)": self.llm.num_predict,
-                        "Top K": self.llm.top_k,
-                        "Top P": self.llm.top_p,
-                        "Prompt Length": len(formatted_prompt),
-                        "Input Variables": input_variables
-                    }
-                    st.json(config_details)
-                
-                with st.expander(f"📝 LLM Prompt for {model.__name__}"):
-                    st.code(formatted_prompt)
+                try:
+                    with st.expander(f"🔧 LLM Configuration for {model.__name__}"):
+                        config_details = {
+                            "Extractor": model.__name__,
+                            "Model": self.model_name,
+                            "Base URL": self.base_url,
+                            "Temperature": self.llm.temperature,
+                            "Max Tokens (num_predict)": self.llm.num_predict,
+                            "Top K": self.llm.top_k,
+                            "Top P": self.llm.top_p,
+                            "Prompt Length": len(formatted_prompt),
+                            "Input Variables": input_variables
+                        }
+                        st.json(config_details)
+                    
+                    with st.expander(f"📝 LLM Prompt for {model.__name__}"):
+                        st.code(formatted_prompt)
+                except:
+                    print(f"Debug info for {model.__name__}: Model={self.model_name}, Prompt Length={len(formatted_prompt)}")
             
             
             response = self.llm.invoke(formatted_prompt)
             
             if development_mode:
-                with st.expander(f"📤 Raw LLM Response for {model.__name__}"):
-                    response_info = {
-                        "Response Length": len(response),
-                        "Response Type": type(response).__name__,
-                        "Has JSON Content": "{" in response and "}" in response
-                    }
-                    st.json(response_info)
-                    st.code(response)
+                try:
+                    with st.expander(f"📤 Raw LLM Response for {model.__name__}"):
+                        response_info = {
+                            "Response Length": len(response),
+                            "Response Type": type(response).__name__,
+                            "Has JSON Content": "{" in response and "}" in response
+                        }
+                        st.json(response_info)
+                        st.code(response)
+                except:
+                    print(f"LLM Response for {model.__name__}: Length={len(response)}, Type={type(response).__name__}")
             
             # Try to parse with Pydantic parser first
             try:
                 parsed_output = parser.parse(response)
                 if development_mode:
-                    st.success(f"Successfully parsed {model.__name__} with Pydantic")
+                    try:
+                        st.success(f"Successfully parsed {model.__name__} with Pydantic")
+                    except:
+                        print(f"Successfully parsed {model.__name__} with Pydantic")
                 return {model.__name__.lower(): parsed_output.model_dump()}
             except Exception as parse_error:
                 if development_mode:
-                    st.warning(f"Pydantic parsing failed for {model.__name__}: {parse_error}")
+                    try:
+                        st.warning(f"Pydantic parsing failed for {model.__name__}: {parse_error}")
+                    except:
+                        print(f"Pydantic parsing failed for {model.__name__}: {parse_error}")
                 
                 # Fallback to manual JSON parsing
                 cleaned_response = self._clean_json_response(response)
@@ -164,15 +194,89 @@ class LLMService:
                 # Validate with the model
                 validated_output = model(**json_output)
                 if development_mode:
-                    st.success(f"Successfully parsed {model.__name__} with manual JSON parsing")
+                    try:
+                        st.success(f"Successfully parsed {model.__name__} with manual JSON parsing")
+                    except:
+                        print(f"Successfully parsed {model.__name__} with manual JSON parsing")
                 return {model.__name__.lower(): validated_output.model_dump()}
                 
         except Exception as e:
             if development_mode:
-                st.error(f"LLM extraction failed for {model.__name__}: {str(e)}")
-                st.exception(e)
+                try:
+                    st.error(f"LLM extraction failed for {model.__name__}: {str(e)}")
+                    st.exception(e)
+                except:
+                    print(f"LLM extraction failed for {model.__name__}: {str(e)}")
             return {model.__name__.lower(): model().model_dump()}
     
+    def stream_simple(
+        self,
+        prompt: str,
+        development_mode: bool = False
+    ):
+        """
+        Stream text response from LLM.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            development_mode: Whether to show detailed process
+            
+        Yields:
+            Text chunks as they are generated
+        """
+        if not self.llm:
+            if development_mode:
+                try:
+                    st.error("LLM not initialized")
+                except:
+                    print("LLM not initialized")
+            yield ""
+            return
+        
+        # Test connection if not already done
+        if not self._test_connection():
+            if development_mode:
+                try:
+                    st.error("LLM connection failed")
+                except:
+                    print("LLM connection failed")
+            yield ""
+            return
+        
+        try:
+            if development_mode:
+                try:
+                    with st.expander("🔧 Streaming LLM Configuration"):
+                        stream_config = {
+                            "Model": self.model_name,
+                            "Base URL": self.base_url,
+                            "Temperature": self.llm.temperature,
+                            "Max Tokens": self.llm.num_predict,
+                            "Top K": self.llm.top_k,
+                            "Top P": self.llm.top_p,
+                            "Prompt Length": len(prompt),
+                            "Streaming": True
+                        }
+                        st.json(stream_config)
+                    
+                    with st.expander("📝 Streaming LLM Prompt"):
+                        st.code(prompt)
+                except:
+                    print(f"Debug info: Model={self.model_name}, Prompt Length={len(prompt)}, Streaming=True")
+            
+            # Use stream method for streaming response
+            for chunk in self.llm.stream(prompt):
+                if chunk:
+                    yield chunk
+            
+        except Exception as e:
+            if development_mode:
+                try:
+                    st.error(f"Streaming LLM failed: {str(e)}")
+                except:
+                    print(f"Streaming LLM failed: {str(e)}")
+            yield ""
+
     def extract_simple(
         self,
         prompt: str,
@@ -190,13 +294,19 @@ class LLMService:
         """
         if not self.llm:
             if development_mode:
-                st.error("LLM not initialized")
+                try:
+                    st.error("LLM not initialized")
+                except:
+                    print("LLM not initialized")
             return ""
         
         # Test connection if not already done
         if not self._test_connection():
             if development_mode:
-                st.error("LLM connection failed")
+                try:
+                    st.error("LLM connection failed")
+                except:
+                    print("LLM connection failed")
             return ""
         
         try:
@@ -231,7 +341,10 @@ class LLMService:
             
         except Exception as e:
             if development_mode:
-                st.error(f"Simple LLM extraction failed: {str(e)}")
+                try:
+                    st.error(f"Simple LLM extraction failed: {str(e)}")
+                except:
+                    print(f"Simple LLM extraction failed: {str(e)}")
             return ""
     
     def _clean_json_response(self, response: str) -> str:

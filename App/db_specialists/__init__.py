@@ -6,12 +6,16 @@ from .base_specialist import BaseSpecialist
 from .intent_specialist import IntentSpecialist
 from .name_extraction_specialist import NameExtractionSpecialist
 from .query_enhancement_specialist import QueryEnhancementSpecialist
-from .response_generation_specialist import ResponseGenerationSpecialist
+from .search_response_specialist import SearchResponseSpecialist
+from .info_response_specialist import InfoResponseSpecialist
+from .general_response_specialist import GeneralResponseSpecialist
 
 __all__ = [
     'BaseSpecialist',
     'IntentSpecialist', 
     'NameExtractionSpecialist',
     'QueryEnhancementSpecialist',
-    'ResponseGenerationSpecialist'
+    'SearchResponseSpecialist',
+    'InfoResponseSpecialist',
+    'GeneralResponseSpecialist'
 ] 

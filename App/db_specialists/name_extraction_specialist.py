@@ -20,14 +20,20 @@ class NameExtractionSpecialist(BaseSpecialist):
 
 **EXTRACTION GUIDELINES:**
 
-1.  **Identify Names in Context:** Scan the user's message for any phrases indicating a person's name.
-    * **Examples:**
-        * "What's John's email address?"
-        * "Tell me about Sarah Johnson."
-        * "I need contact details for Mike Smith."
-        * "Can you find Mary's resume?"
-        * "Show me info about Dr. David Williams."
-        * "Email for the candidate named Jennifer."
+1. **Identify Names in Context:** Scan the user's message for any phrases indicating a person's name.
+    **Examples:**
+    * **User:** "What's John's email address?"
+        **Output:** John
+    * **User:** "Tell me about Sarah Johnson."
+        **Output:** Sarah Johnson
+    * **User:** "I need contact details for Mike Smith."
+        **Output:** Mike Smith
+    * **User:** "Can you find Mary's resume?"
+        **Output:** Mary
+    * **User:** "Show me info about Dr. David Williams."
+        **Output:** Dr. David Williams
+    * **User:** "Email for the candidate named Jennifer."
+        **Output:** Jennifer
 
 2.  **Clean Extracted Names:** If a name is found, process it according to these rules:
     * **Remove Titles:** Eliminate honorifics like "Dr.", "Mr.", "Ms.", "Mrs.", "Prof.", etc.
@@ -54,13 +60,12 @@ Provide your analysis in the following JSON format:
 {{
     "name": "extracted name or empty string",
     "confidence": 0.95,
-    "reasoning": "brief explanation of extraction"
 }}
 
 Examples:
-- "What's John's email?" → {{"name": "John", "confidence": 0.9, "reasoning": "Clear possessive reference to John"}}
-- "Tell me about Dr. Sarah Johnson" → {{"name": "Sarah Johnson", "confidence": 0.95, "reasoning": "Full name with title removed"}}
-- "Find Python developers" → {{"name": "", "confidence": 0.1, "reasoning": "No specific candidate name mentioned"}}"""
+- "What's John's email?" → {{"name": "John", "confidence": 0.9}}
+- "Tell me about Dr. Sarah Johnson" → {{"name": "Sarah Johnson", "confidence": 0.95}}
+- "Find Python developers" → {{"name": "", "confidence": 0.1}}"""
     
     def process_output(self, output: str, **kwargs) -> str:
         """Process the name extraction output."""

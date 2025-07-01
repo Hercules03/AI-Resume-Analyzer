@@ -81,6 +81,30 @@ class BaseSpecialist(ABC):
         except Exception as e:
             st.error(f"{self.__class__.__name__} execution failed: {e}")
             return self._get_fallback_output(**kwargs)
+
+    def stream(self, **kwargs):
+        """Execute the specialist function with streaming."""
+        if not self.llm:
+            raise Exception(f"{self.__class__.__name__} LLM not initialized")
+        
+        try:
+            # Prepare input data
+            input_data = self.prepare_input_data(**kwargs)
+            
+            # Create prompt
+            prompt = ChatPromptTemplate.from_messages([
+                SystemMessage(content=self.get_system_prompt()),
+                HumanMessage(content=self.get_user_prompt_template().format(**input_data))
+            ])
+            
+            # Stream response
+            for chunk in self.llm.stream(prompt.format_messages()):
+                if chunk.content:
+                    yield chunk.content
+            
+        except Exception as e:
+            st.error(f"{self.__class__.__name__} streaming failed: {e}")
+            yield self._get_fallback_output(**kwargs)
     
     @abstractmethod
     def _get_fallback_output(self, **kwargs) -> Any:

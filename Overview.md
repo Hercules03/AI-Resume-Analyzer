@@ -135,7 +135,6 @@ LLM_CONFIG = {
     'sec_token': 'security_token',
     'name': 'candidate_name',
     'email': 'candidate_email', 
-    'resume_score': 'completeness_percentage',
     'reco_field': 'recommended_field',
     'cand_level': 'career_level',
     'skills': 'extracted_skills_list',
@@ -295,7 +294,6 @@ The system was completely rebuilt from a rule-based parser to an AI-powered anal
 - **Migration**: No direct migration path - reprocessing required
 
 ### Database Compatibility
-- Legacy resume scores maintained for backward compatibility
 - Gap analysis data available in JSON exports
 - Enhanced metadata schema for future extensions
 
