@@ -9,6 +9,7 @@ from .query_enhancement_specialist import QueryEnhancementSpecialist
 from .search_response_specialist import SearchResponseSpecialist
 from .info_response_specialist import InfoResponseSpecialist
 from .general_response_specialist import GeneralResponseSpecialist
+from .filter_matching_specialist import FilterMatchingSpecialist
 
 __all__ = [
     'BaseSpecialist',
@@ -17,5 +18,6 @@ __all__ = [
     'QueryEnhancementSpecialist',
     'SearchResponseSpecialist',
     'InfoResponseSpecialist',
-    'GeneralResponseSpecialist'
+    'GeneralResponseSpecialist',
+    'FilterMatchingSpecialist'
 ] 

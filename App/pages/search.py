@@ -9,9 +9,10 @@ import re
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from llm_service import llm_service
-from config import PAGE_CONFIG
+from config import PAGE_CONFIG, SPECIALISTS_CONFIG
 from database import db_manager
 from analyzers import JobDescriptionAnalyzer
+from db_specialists import FilterMatchingSpecialist
 
 st.set_page_config(**PAGE_CONFIG)
 
@@ -132,7 +133,7 @@ def display_search_results(search_results, search_type):
                 match_color = "#dc3545"
             
             # Streamlined candidate card - everything visible when clicked
-            with st.expander(f"**{metadata.get('name', 'Unknown')}** ({similarity}% {match_text} Match)", expanded=False):
+            with st.expander(f"**{metadata.get('name', 'Unknown')}**", expanded=False):
                 
                 # === CANDIDATE SUMMARY (Top Section) ===
                 st.markdown('<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">', unsafe_allow_html=True)
@@ -359,12 +360,16 @@ def display_search_results(search_results, search_type):
         st.warning("**No candidates found.** Try refining your search query or using different keywords.")
 
 
-# Old display_filtered_candidates function removed - now using display_search_results for consistency
-
 def apply_candidate_filters(field_filter, level_filter, city_filter, state_filter, required_skills, num_results):
-    """Apply filters to candidate database and return matching candidates"""
+    """Apply filters to candidate database and return matching candidates using LLM-based semantic matching"""
     
     try:
+        # Initialize filter matching specialist
+        filter_specialist = FilterMatchingSpecialist(SPECIALISTS_CONFIG['filter_matching'])
+        
+        # Check if LLM specialist is available, fallback to simple matching if not
+        use_llm_filtering = filter_specialist.is_available()
+        
         # Get all user data
         user_data = db_manager.get_user_data()
         if user_data is None or user_data.empty:
@@ -373,117 +378,195 @@ def apply_candidate_filters(field_filter, level_filter, city_filter, state_filte
         # Apply filters using proper column names
         filtered_data = user_data.copy()
         
-        # Field filter - use case-insensitive matching and handle similar field names
+        # Field filter - use LLM-based semantic matching with fallback
         if field_filter != 'All Fields':
-            # First try exact match
-            exact_match = filtered_data[filtered_data['Predicted_Field'] == field_filter]
+            # Get unique field values from database
+            available_fields = filtered_data['Predicted_Field'].dropna().unique().tolist()
             
-            if exact_match.empty:
-                # Try case-insensitive match
-                case_insensitive_match = filtered_data[
-                    filtered_data['Predicted_Field'].str.lower() == field_filter.lower()
-                ]
+            if available_fields:
+                if use_llm_filtering:
+                    try:
+                        # Use LLM to find semantic matches
+                        field_match_result = filter_specialist.execute(
+                            filter_type="field/domain",
+                            filter_criteria=field_filter,
+                            available_values=available_fields
+                        )
+                        
+                        matched_fields = field_match_result.get('matched_values', [])
+                        
+                        if matched_fields:
+                            # Filter by matched fields
+                            filtered_data = filtered_data[filtered_data['Predicted_Field'].isin(matched_fields)]
+                        else:
+                            # No semantic matches found, return empty results
+                            filtered_data = filtered_data.iloc[0:0]  # Empty DataFrame with same structure
+                    except Exception as e:
+                        st.warning(f"LLM field filtering failed, using fallback: {str(e)}")
+                        use_llm_filtering = False
                 
-                if case_insensitive_match.empty:
-                    # Try partial matching (contains)
-                    partial_match = filtered_data[
+                if not use_llm_filtering:
+                    # Fallback: simple case-insensitive partial matching
+                    field_matches = filtered_data[
                         filtered_data['Predicted_Field'].str.contains(field_filter, case=False, na=False)
                     ]
-                    
-                    if partial_match.empty:
-                        # Try reverse partial matching (field_filter contains database value)
-                        reverse_partial_match = filtered_data[
+                    if field_matches.empty:
+                        # Try reverse partial matching
+                        field_matches = filtered_data[
                             filtered_data['Predicted_Field'].apply(
                                 lambda x: str(x).lower() in field_filter.lower() if pd.notna(x) else False
                             )
                         ]
-                        filtered_data = reverse_partial_match
-                    else:
-                        filtered_data = partial_match
-                else:
-                    filtered_data = case_insensitive_match
-            else:
-                filtered_data = exact_match
-            
+                    filtered_data = field_matches
         
-        # Level filter - use flexible matching for different naming conventions
-        if level_filter != 'All Levels':
-            # Extended level variations to handle all possible naming conventions
-            level_variations = {
-                'Senior': ['Senior', 'Senior Level', 'Senior Developer', 'Senior Engineer', 'Lead', 'Principal'],
-                'Senior Level': ['Senior', 'Senior Level', 'Senior Developer', 'Senior Engineer', 'Lead', 'Principal'],
-                'Entry Level': ['Entry Level', 'Entry', 'Junior', 'Graduate', 'Intern', 'Trainee'],
-                'Mid Level': ['Mid Level', 'Mid', 'Intermediate', 'Associate', 'Regular'],
-                'Junior': ['Junior', 'Junior Level', 'Entry Level', 'Entry', 'Graduate'],
-                'Lead/Expert': ['Lead/Expert', 'Lead', 'Expert', 'Lead Level', 'Principal', 'Architect', 'Director']
-            }
+        # Level filter - use LLM-based semantic matching with fallback 
+        if level_filter != 'All Levels' and not filtered_data.empty:
+            # Get unique level values from remaining data
+            available_levels = filtered_data['User_level'].dropna().unique().tolist()
             
-            possible_levels = level_variations.get(level_filter, [level_filter])
-            
-            # Try exact match first
-            level_match = filtered_data[filtered_data['User_level'].isin(possible_levels)]
-            
-            if level_match.empty:
-                # Try case-insensitive match
-                level_match = filtered_data[
-                    filtered_data['User_level'].str.lower().isin([level.lower() for level in possible_levels])
-                ]
-                
-                if level_match.empty:
-                    # Try partial matching
-                    level_conditions = []
-                    for level in possible_levels:
-                        level_conditions.append(
-                            filtered_data['User_level'].str.contains(level, case=False, na=False)
+            if available_levels:
+                if use_llm_filtering:
+                    try:
+                        # Use LLM to find semantic matches
+                        level_match_result = filter_specialist.execute(
+                            filter_type="experience level",
+                            filter_criteria=level_filter,
+                            available_values=available_levels
                         )
+                        
+                        matched_levels = level_match_result.get('matched_values', [])
+                        
+                        if matched_levels:
+                            # Filter by matched levels
+                            filtered_data = filtered_data[filtered_data['User_level'].isin(matched_levels)]
+                        else:
+                            # No semantic matches found, return empty results
+                            filtered_data = filtered_data.iloc[0:0]
+                    except Exception as e:
+                        st.warning(f"LLM level filtering failed, using fallback: {str(e)}")
+                        use_llm_filtering = False
+                
+                if not use_llm_filtering:
+                    # Fallback: predefined level variations
+                    level_variations = {
+                        'Senior': ['Senior', 'Senior Level', 'Senior Developer', 'Senior Engineer', 'Lead', 'Principal'],
+                        'Senior Level': ['Senior', 'Senior Level', 'Senior Developer', 'Senior Engineer', 'Lead', 'Principal'],
+                        'Entry Level': ['Entry Level', 'Entry', 'Junior', 'Graduate', 'Intern', 'Trainee'],
+                        'Mid Level': ['Mid Level', 'Mid', 'Intermediate', 'Associate', 'Regular'],
+                        'Junior': ['Junior', 'Junior Level', 'Entry Level', 'Entry', 'Graduate'],
+                        'Lead/Expert': ['Lead/Expert', 'Lead', 'Expert', 'Lead Level', 'Principal', 'Architect', 'Director']
+                    }
                     
-                    if level_conditions:
-                        combined_condition = level_conditions[0]
-                        for condition in level_conditions[1:]:
-                            combined_condition = combined_condition | condition
-                        level_match = filtered_data[combined_condition]
-            
-            filtered_data = level_match
+                    possible_levels = level_variations.get(level_filter, [level_filter])
+                    level_match = filtered_data[
+                        filtered_data['User_level'].str.lower().isin([level.lower() for level in possible_levels])
+                    ]
+                    filtered_data = level_match
         
 
         
-        # Location filters - use case-insensitive matching
-        if city_filter != 'All Cities':
+        # Location filters - keep simple exact/case-insensitive matching (location names are usually straightforward)
+        if city_filter != 'All Cities' and not filtered_data.empty:
             # Try exact match first, then case-insensitive
             city_exact = filtered_data[filtered_data['city'] == city_filter]
             if city_exact.empty:
                 city_match = filtered_data[filtered_data['city'].str.lower() == city_filter.lower()]
+                filtered_data = city_match
             else:
-                city_match = city_exact
-            filtered_data = city_match
+                filtered_data = city_exact
 
-        
-        if state_filter != 'All States':
+        if state_filter != 'All States' and not filtered_data.empty:
             # Try exact match first, then case-insensitive
             state_exact = filtered_data[filtered_data['state'] == state_filter]
             if state_exact.empty:
                 state_match = filtered_data[filtered_data['state'].str.lower() == state_filter.lower()]
+                filtered_data = state_match
             else:
-                state_match = state_exact
-            filtered_data = state_match
+                filtered_data = state_exact
         
-        # Skills filter - use case-insensitive partial matching
-        if required_skills:
-            skills_conditions = []
-            for skill in required_skills:
-                skills_conditions.append(
-                    filtered_data['Actual_skills'].str.contains(skill, case=False, na=False)
-                )
+        # Skills filter - use LLM-based semantic matching with fallback
+        if required_skills and not filtered_data.empty:
+            if use_llm_filtering:
+                try:
+                    # Get all unique skills from the remaining candidates
+                    all_candidate_skills = []
+                    for _, row in filtered_data.iterrows():
+                        skills_text = str(row.get('Actual_skills', ''))
+                        if skills_text and skills_text != 'nan':
+                            # Parse skills from the text (they might be comma-separated or in other formats)
+                            candidate_skills = [s.strip() for s in skills_text.replace('[', '').replace(']', '').replace("'", "").replace('"', '').split(',')]
+                            all_candidate_skills.extend(candidate_skills)
+                    
+                    # Get unique skills
+                    unique_skills = list(set([skill.strip() for skill in all_candidate_skills if skill.strip()]))
+                    
+                    if unique_skills:
+                        # Track candidates that match each required skill
+                        skill_matched_candidates = []
+                        
+                        for required_skill in required_skills:
+                            # Use LLM to find semantic matches for this skill
+                            skill_match_result = filter_specialist.execute(
+                                filter_type="skill/technology",
+                                filter_criteria=required_skill,
+                                available_values=unique_skills
+                            )
+                            
+                            matched_skills = skill_match_result.get('matched_values', [])
+                            
+                            if matched_skills:
+                                # Find candidates who have any of these matched skills
+                                skill_candidates = []
+                                for _, row in filtered_data.iterrows():
+                                    candidate_skills_text = str(row.get('Actual_skills', ''))
+                                    if candidate_skills_text and candidate_skills_text != 'nan':
+                                        # Check if any matched skill is in this candidate's skills
+                                        for matched_skill in matched_skills:
+                                            if matched_skill.lower() in candidate_skills_text.lower():
+                                                skill_candidates.append(row.name)  # Add row index
+                                                break
+                                
+                                skill_matched_candidates.append(set(skill_candidates))
+                            else:
+                                # No matches for this skill - set to empty to filter out all candidates
+                                skill_matched_candidates.append(set())
+                        
+                        # Require ALL skills to match (AND condition) - find intersection of all skill matches
+                        if skill_matched_candidates:
+                            final_candidates = skill_matched_candidates[0]
+                            for skill_set in skill_matched_candidates[1:]:
+                                final_candidates = final_candidates.intersection(skill_set)
+                            
+                            # Filter to only these candidates
+                            if final_candidates:
+                                filtered_data = filtered_data.loc[list(final_candidates)]
+                            else:
+                                # No candidates match all required skills
+                                filtered_data = filtered_data.iloc[0:0]
+                        else:
+                            # No skill matches at all
+                            filtered_data = filtered_data.iloc[0:0]
+                    else:
+                        # No skills data available, can't filter
+                        pass
+                except Exception as e:
+                    st.warning(f"LLM skills filtering failed, using fallback: {str(e)}")
+                    use_llm_filtering = False
             
-            if skills_conditions:
-                # Require ALL skills to match (AND condition)
-                combined_condition = skills_conditions[0]
-                for condition in skills_conditions[1:]:
-                    combined_condition = combined_condition & condition
-                filtered_data = filtered_data[combined_condition]
-            
-            if show_debug:
-                st.success(f"After skills filter {required_skills}: {len(filtered_data)} candidates remaining")
+            if not use_llm_filtering:
+                # Fallback: simple case-insensitive partial matching
+                skills_conditions = []
+                for skill in required_skills:
+                    skills_conditions.append(
+                        filtered_data['Actual_skills'].str.contains(skill, case=False, na=False)
+                    )
+                
+                if skills_conditions:
+                    # Require ALL skills to match (AND condition)
+                    combined_condition = skills_conditions[0]
+                    for condition in skills_conditions[1:]:
+                        combined_condition = combined_condition & condition
+                    filtered_data = filtered_data[combined_condition]
         
         # Limit results
         filtered_data = filtered_data.head(num_results)

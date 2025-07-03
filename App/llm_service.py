@@ -1,60 +1,138 @@
 """
 Centralized LLM service for handling all LLM interactions.
+Supports both Ollama (local) and OpenAI API providers.
 """
 import json
 import re
+import os
 from typing import Type, Dict, Any, List
 import streamlit as st
 from pydantic import BaseModel
 from langchain.output_parsers import PydanticOutputParser
 from config import LLM_CONFIG
 
+# Try to import Ollama dependencies
 try:
     from langchain_ollama import OllamaLLM
     from langchain.prompts import PromptTemplate
-    LANGCHAIN_AVAILABLE = True
+    OLLAMA_AVAILABLE = True
 except ImportError:
-    LANGCHAIN_AVAILABLE = False
+    OLLAMA_AVAILABLE = False
+
+# Try to import OpenAI dependencies  
+try:
+    from langchain_openai import ChatOpenAI
+    from langchain.prompts import PromptTemplate
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 
 class LLMService:
-    """Centralized service for LLM operations."""
+    """Centralized service for LLM operations supporting both Ollama and OpenAI."""
     
-    def __init__(self, model_name: str = None, base_url: str = None):
-        """Initialize the LLM service."""
-        self.model_name = model_name or LLM_CONFIG['default_model']
-        self.base_url = base_url or LLM_CONFIG['default_url']
+    def __init__(self, provider: str = None, model_name: str = None, **kwargs):
+        """
+        Initialize the LLM service.
+        
+        Args:
+            provider: 'ollama' or 'openai'
+            model_name: Model name to use (optional, will use default from config)
+            **kwargs: Additional provider-specific arguments
+        """
+        self.provider = provider or LLM_CONFIG['default_provider']
         self.llm = None
         self.connection_tested = False
+        
+        # Set model name based on provider
+        if model_name:
+            self.model_name = model_name
+        else:
+            self.model_name = LLM_CONFIG[self.provider]['default_model']
+        
+        # Store provider-specific config
+        self.config = LLM_CONFIG[self.provider].copy()
+        self.config.update(kwargs)
+        
+        # Initialize the appropriate LLM
         self._initialize_llm()
     
     def _initialize_llm(self):
-        """Initialize the Ollama LLM connection."""
-        if not LANGCHAIN_AVAILABLE:
+        """Initialize the LLM connection based on provider."""
+        if self.provider == 'ollama':
+            return self._initialize_ollama()
+        elif self.provider == 'openai':
+            return self._initialize_openai()
+        else:
             try:
-                st.error("LangChain not available. Please install: pip install langchain langchain-ollama")
+                st.error(f"Unsupported provider: {self.provider}")
             except:
-                print("LangChain not available. Please install: pip install langchain langchain-ollama")
+                print(f"Unsupported provider: {self.provider}")
+            return False
+    
+    def _initialize_ollama(self):
+        """Initialize Ollama LLM connection."""
+        if not OLLAMA_AVAILABLE:
+            try:
+                st.error("Ollama not available. Please install: pip install langchain langchain-ollama")
+            except:
+                print("Ollama not available. Please install: pip install langchain langchain-ollama")
             return False
         
         try:
             self.llm = OllamaLLM(
                 model=self.model_name,
-                base_url=self.base_url,
-                temperature=LLM_CONFIG['temperature'],
-                num_predict=LLM_CONFIG['num_predict'],
-                top_k=LLM_CONFIG['top_k'],
-                top_p=LLM_CONFIG['top_p']
+                base_url=self.config['default_url'],
+                temperature=self.config['temperature'],
+                num_predict=self.config['num_predict'],
+                num_ctx=self.config['num_ctx'],
+                top_k=self.config['top_k'],
+                top_p=self.config['top_p']
             )
-            
-            # Don't test connection immediately - do it lazily when first used
             return True
                 
         except Exception as e:
             try:
-                st.error(f"Failed to initialize LLM: {str(e)}")
+                st.error(f"Failed to initialize Ollama: {str(e)}")
             except:
-                print(f"Failed to initialize LLM: {str(e)}")
+                print(f"Failed to initialize Ollama: {str(e)}")
+            return False
+    
+    def _initialize_openai(self):
+        """Initialize OpenAI LLM connection."""
+        if not OPENAI_AVAILABLE:
+            try:
+                st.error("OpenAI not available. Please install: pip install langchain-openai")
+            except:
+                print("OpenAI not available. Please install: pip install langchain-openai")
+            return False
+        
+        try:
+            # Get API key from config or environment variable
+            api_key = self.config.get('api_key') or os.getenv('OPENAI_API_KEY')
+            
+            if not api_key:
+                try:
+                    st.error("OpenAI API key not found. Please set OPENAI_API_KEY environment variable or configure it in config.py")
+                except:
+                    print("OpenAI API key not found. Please set OPENAI_API_KEY environment variable or configure it in config.py")
+                return False
+            
+            self.llm = ChatOpenAI(
+                model=self.model_name,
+                temperature=self.config['temperature'],
+                max_tokens=self.config['max_tokens'],
+                top_p=self.config['top_p'],
+                api_key=api_key,
+                timeout=self.config['timeout']
+            )
+            return True
+                
+        except Exception as e:
+            try:
+                st.error(f"Failed to initialize OpenAI: {str(e)}")
+            except:
+                print(f"Failed to initialize OpenAI: {str(e)}")
             return False
     
     def _test_connection(self):
@@ -64,22 +142,31 @@ class LLMService:
         
         try:
             # Simple test with minimal prompt
-            test_response = self.llm.invoke("Hi")
-            if test_response:
+            if self.provider == 'openai':
+                # For OpenAI ChatModels, we need to use messages format
+                from langchain.schema import HumanMessage
+                test_response = self.llm.invoke([HumanMessage(content="Hi")])
+                response_content = test_response.content if hasattr(test_response, 'content') else str(test_response)
+            else:
+                # For Ollama, use direct invoke
+                test_response = self.llm.invoke("Hi")
+                response_content = test_response
+                
+            if response_content:
                 self.connection_tested = True
                 return True
             else:
                 try:
-                    st.error("LLM connection test failed - no response")
+                    st.error(f"{self.provider.title()} connection test failed - no response")
                 except:
-                    print("LLM connection test failed - no response")
+                    print(f"{self.provider.title()} connection test failed - no response")
                 return False
                 
         except Exception as e:
             try:
-                st.error(f"LLM connection test failed: {str(e)}")
+                st.error(f"{self.provider.title()} connection test failed: {str(e)}")
             except:
-                print(f"LLM connection test failed: {str(e)}")
+                print(f"{self.provider.title()} connection test failed: {str(e)}")
             return False
     
     def extract_with_llm(
@@ -139,24 +226,44 @@ class LLMService:
                     with st.expander(f"🔧 LLM Configuration for {model.__name__}"):
                         config_details = {
                             "Extractor": model.__name__,
+                            "Provider": self.provider.title(),
                             "Model": self.model_name,
-                            "Base URL": self.base_url,
-                            "Temperature": self.llm.temperature,
-                            "Max Tokens (num_predict)": self.llm.num_predict,
-                            "Top K": self.llm.top_k,
-                            "Top P": self.llm.top_p,
+                            "Temperature": self.config['temperature'],
                             "Prompt Length": len(formatted_prompt),
                             "Input Variables": input_variables
                         }
+                        
+                        # Add provider-specific details
+                        if self.provider == 'ollama':
+                            config_details.update({
+                                "Base URL": self.config['default_url'],
+                                "Max Tokens (num_predict)": self.config['num_predict'],
+                                "Top K": self.config['top_k'],
+                                "Top P": self.config['top_p']
+                            })
+                        elif self.provider == 'openai':
+                            config_details.update({
+                                "Max Tokens": self.config['max_tokens'],
+                                "Top P": self.config['top_p'],
+                                "API Key": "***" if self.config.get('api_key') or os.getenv('OPENAI_API_KEY') else "Not Set"
+                            })
+                        
                         st.json(config_details)
                     
                     with st.expander(f"📝 LLM Prompt for {model.__name__}"):
                         st.code(formatted_prompt)
                 except:
-                    print(f"Debug info for {model.__name__}: Model={self.model_name}, Prompt Length={len(formatted_prompt)}")
+                    print(f"Debug info for {model.__name__}: Provider={self.provider}, Model={self.model_name}, Prompt Length={len(formatted_prompt)}")
             
-            
-            response = self.llm.invoke(formatted_prompt)
+            # Invoke LLM based on provider
+            if self.provider == 'openai':
+                # For OpenAI ChatModels, we need to use messages format
+                from langchain.schema import HumanMessage
+                llm_response = self.llm.invoke([HumanMessage(content=formatted_prompt)])
+                response = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
+            else:
+                # For Ollama, use direct invoke
+                response = self.llm.invoke(formatted_prompt)
             
             if development_mode:
                 try:
@@ -248,26 +355,48 @@ class LLMService:
                 try:
                     with st.expander("🔧 Streaming LLM Configuration"):
                         stream_config = {
+                            "Provider": self.provider.title(),
                             "Model": self.model_name,
-                            "Base URL": self.base_url,
-                            "Temperature": self.llm.temperature,
-                            "Max Tokens": self.llm.num_predict,
-                            "Top K": self.llm.top_k,
-                            "Top P": self.llm.top_p,
+                            "Temperature": self.config['temperature'],
                             "Prompt Length": len(prompt),
                             "Streaming": True
                         }
+                        
+                        # Add provider-specific details
+                        if self.provider == 'ollama':
+                            stream_config.update({
+                                "Base URL": self.config['default_url'],
+                                "Max Tokens": self.config['num_predict'],
+                                "Top K": self.config['top_k'],
+                                "Top P": self.config['top_p']
+                            })
+                        elif self.provider == 'openai':
+                            stream_config.update({
+                                "Max Tokens": self.config['max_tokens'],
+                                "Top P": self.config['top_p']
+                            })
+                        
                         st.json(stream_config)
                     
                     with st.expander("📝 Streaming LLM Prompt"):
                         st.code(prompt)
                 except:
-                    print(f"Debug info: Model={self.model_name}, Prompt Length={len(prompt)}, Streaming=True")
+                    print(f"Debug info: Provider={self.provider}, Model={self.model_name}, Prompt Length={len(prompt)}, Streaming=True")
             
             # Use stream method for streaming response
-            for chunk in self.llm.stream(prompt):
-                if chunk:
-                    yield chunk
+            if self.provider == 'openai':
+                # For OpenAI ChatModels, use messages format for streaming
+                from langchain.schema import HumanMessage
+                for chunk in self.llm.stream([HumanMessage(content=prompt)]):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        yield chunk.content
+                    elif chunk:
+                        yield str(chunk)
+            else:
+                # For Ollama, use direct streaming
+                for chunk in self.llm.stream(prompt):
+                    if chunk:
+                        yield chunk
             
         except Exception as e:
             if development_mode:
@@ -313,20 +442,40 @@ class LLMService:
             if development_mode:
                 with st.expander("🔧 Simple LLM Configuration"):
                     simple_config = {
+                        "Provider": self.provider.title(),
                         "Model": self.model_name,
-                        "Base URL": self.base_url,
-                        "Temperature": self.llm.temperature,
-                        "Max Tokens": self.llm.num_predict,
-                        "Top K": self.llm.top_k,
-                        "Top P": self.llm.top_p,
+                        "Temperature": self.config['temperature'],
                         "Prompt Length": len(prompt)
                     }
+                    
+                    # Add provider-specific details
+                    if self.provider == 'ollama':
+                        simple_config.update({
+                            "Base URL": self.config['default_url'],
+                            "Max Tokens": self.config['num_predict'],
+                            "Top K": self.config['top_k'],
+                            "Top P": self.config['top_p']
+                        })
+                    elif self.provider == 'openai':
+                        simple_config.update({
+                            "Max Tokens": self.config['max_tokens'],
+                            "Top P": self.config['top_p']
+                        })
+                    
                     st.json(simple_config)
                 
                 with st.expander("📝 Simple LLM Prompt"):
                     st.code(prompt)
             
-            response = self.llm.invoke(prompt)
+            # Invoke LLM based on provider
+            if self.provider == 'openai':
+                # For OpenAI ChatModels, use messages format
+                from langchain.schema import HumanMessage
+                llm_response = self.llm.invoke([HumanMessage(content=prompt)])
+                response = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
+            else:
+                # For Ollama, use direct invoke
+                response = self.llm.invoke(prompt)
             
             if development_mode:
                 with st.expander("📤 Simple LLM Response"):
@@ -381,6 +530,29 @@ class LLMService:
         self.model_name = model_name
         self.connection_tested = False  # Reset connection test
         self._initialize_llm()
+    
+    def update_provider(self, provider: str, model_name: str = None):
+        """Update the provider and optionally the model."""
+        self.provider = provider
+        self.config = LLM_CONFIG[provider].copy()
+        
+        if model_name:
+            self.model_name = model_name
+        else:
+            self.model_name = LLM_CONFIG[provider]['default_model']
+        
+        self.connection_tested = False  # Reset connection test
+        self._initialize_llm()
+    
+    def get_available_models(self):
+        """Get available models for the current provider."""
+        if self.provider == 'ollama':
+            # For Ollama, these are common models - you can extend this list
+            return ['gemma3:27b', 'gemma3:12b', 'gemma3:4b', 'llama3.2:3b', 'llama3.2:1b', 'mistral:7b']
+        elif self.provider == 'openai':
+            # Common OpenAI models
+            return ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo']
+        return []
 
 
 # Global LLM service instance

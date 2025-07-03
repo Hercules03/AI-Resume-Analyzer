@@ -27,15 +27,34 @@ ADMIN_CONFIG = {
     'password': '@dmin1234'
 }
 
-# LLM Configuration (optimized for local Ollama usage)
+# LLM Configuration - Supports both Ollama and OpenAI
 LLM_CONFIG = {
-    'default_model': 'gemma3:12b',
-    'default_url': 'http://localhost:11434',
-    'temperature': 0.1,
-    'num_predict': 4096,  # Reduced for better performance
-    'top_k': 10,
-    'top_p': 0.9,
-    'timeout': 60  # Add timeout for requests
+    # Default provider: 'ollama' or 'openai'
+    'default_provider': 'ollama',
+    
+    # Ollama Configuration
+    'ollama': {
+        'default_model': 'gemma3:27b',
+        'default_url': 'http://localhost:11434',
+        'temperature': 0.1,
+        'num_ctx': 16384,
+        'num_predict': 16384,
+        'top_k': 10,
+        'top_p': 0.9,
+        'timeout': 60
+    },
+    
+    # OpenAI Configuration
+    'openai': {
+        'default_model': 'gpt-4o-mini',  # Cost-effective model, you can change to gpt-4 if needed
+        'temperature': 0.1,
+        'max_tokens': 16384,
+        'top_p': 0.9,
+        'timeout': 60,
+        # OpenAI API key should be set as environment variable: OPENAI_API_KEY
+        # You can also set it here if you prefer (not recommended for security)
+        'api_key': None  # Will use environment variable OPENAI_API_KEY
+    }
 }
 
 # Chatbot Specialists Configuration
@@ -88,6 +107,13 @@ SPECIALISTS_CONFIG = {
         'temperature': 0.4,  # More conversational and friendly
         'num_predict': 2048,
         'timeout': 45
+    },
+    'filter_matching': {
+        'model': 'gemma3:4b',  # Lightweight model for semantic matching
+        'url': 'http://localhost:11434',
+        'temperature': 0.2,  # Structured matching with slight flexibility
+        'num_predict': 512,
+        'timeout': 30
     }
 }
 

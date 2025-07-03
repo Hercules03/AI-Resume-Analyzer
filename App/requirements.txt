@@ -58,12 +58,16 @@ opencv-python>=4.8.0
 # LLM AND RAG DEPENDENCIES
 # =============================================================================
 
-# LangChain framework and Ollama integration
+# LangChain framework and integrations
 langchain>=0.1.10
 langchain-ollama>=0.1.0
+langchain-openai>=0.1.0
 langchain-core>=0.1.25
 langchain-community>=0.0.20
 langgraph>=0.0.30
+
+# OpenAI API client
+openai>=1.0.0
 
 # Data validation
 pydantic>=2.6.1

@@ -20,11 +20,21 @@ st.set_page_config(**PAGE_CONFIG)
 
 st.title("Candidate Evaluation")
 
+# === LLM CONFIGURATION (HIDDEN) ===
+# Initialize LLM service with Ollama in background
+if 'llm_service' not in st.session_state:
+    llm_service = LLMService(provider='ollama')
+    st.session_state.llm_service = llm_service
+else:
+    llm_service = st.session_state.llm_service
+
 resume_processor = ResumeProcessor()
 
-llm_model = "gemma3:12b"
-
-llm_service = LLMService(model_name=llm_model)
+# Configure the extractors to use the selected LLM service
+if 'llm_service' in st.session_state:
+    # Update the global llm_service used by extractors
+    import llm_service as llm_service_module
+    llm_service_module.llm_service = st.session_state.llm_service
 
 system_info = get_system_info()
 location_info = get_location_info()
