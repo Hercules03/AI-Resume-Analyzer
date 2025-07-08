@@ -34,15 +34,20 @@ class NameExtractionSpecialist(BaseSpecialist):
         **Output:** Dr. David Williams
     * **User:** "Email for the candidate named Jennifer."
         **Output:** Jennifer
+    * **User:** "Does POON Kwok Tung have an SFC license?"
+        **Output:** POON Kwok Tung
+    * **User:** "Check JOHN SMITH's SFC license"
+        **Output:** JOHN SMITH
 
 2.  **Clean Extracted Names:** If a name is found, process it according to these rules:
     * **Remove Titles:** Eliminate honorifics like "Dr.", "Mr.", "Ms.", "Mrs.", "Prof.", etc.
     * **Remove Possessive Markers:** Remove "'s" at the end of a name.
     * **Retain Full Names:** Keep both first and last names when present.
     * **Handle Single Names:** If only a single name is provided, extract that single name.
+    * **Handle Various Capitalizations:** Extract names in ANY capitalization (TitleCase, UPPERCASE, lowercase).
 
 3.  **Assign Confidence Scores:**
-    * **High Confidence (0.8-1.0):** The name is clearly identifiable and unambiguous (e.g., "John Smith," "Sarah").
+    * **High Confidence (0.8-1.0):** The name is clearly identifiable and unambiguous (e.g., "John Smith," "Sarah", "POON Kwok Tung").
     * **Medium Confidence (0.5-0.8):** The name is somewhat clear but might have minor ambiguities or require slight inference (e.g., "the candidate named Alex").
     * **Low Confidence (0.0-0.5):** The name is highly uncertain, ambiguous, or no clear name is found.
 
@@ -65,6 +70,8 @@ Provide your analysis in the following JSON format:
 Examples:
 - "What's John's email?" → {{"name": "John", "confidence": 0.9}}
 - "Tell me about Dr. Sarah Johnson" → {{"name": "Sarah Johnson", "confidence": 0.95}}
+- "Does POON Kwok Tung have an SFC license?" → {{"name": "POON Kwok Tung", "confidence": 0.95}}
+- "Check MARY WONG's SFC license" → {{"name": "MARY WONG", "confidence": 0.9}}
 - "Find Python developers" → {{"name": "", "confidence": 0.1}}"""
     
     def process_output(self, output: str, **kwargs) -> str:
@@ -96,21 +103,54 @@ Examples:
             return name
             
         except (json.JSONDecodeError, ValueError):
-            # Fallback: look for capitalized words that might be names
+            # Enhanced fallback: look for names in various capitalizations
             import re
             query = kwargs.get('query', '')
             
-            # Simple pattern matching as fallback
+            # Enhanced patterns for different name formats
             patterns = [
-                r"(?:email of|contact for|about|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-                r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'s?\s+(?:email|contact|info|resume)",
-                r"(?:who is|tell me about)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"
+                # "Do [NAME] have" pattern - most specific for this case
+                r"(?:do|does)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*){1,2})\s+(?:have|hold|got)",
+                
+                # SFC license specific patterns
+                r"(?:does|check|is)\s+([A-Z]+(?:\s+[A-Z]+)*(?:\s+[A-Z]+)*)\s+(?:have|hold|holds?)\s+(?:an?\s+)?sfc\s+licen[sc]e",
+                r"(?:sfc\s+licen[sc]e\s+(?:verification\s+)?for|check)\s+([A-Z]+(?:\s+[A-Z]+)*(?:\s+[A-Z]+)*)",
+                r"([A-Z]+(?:\s+[A-Z]+)*(?:\s+[A-Z]+)*)\s+sfc\s+licen[sc]ed?",
+                r"([A-Z]+(?:\s+[A-Z]+)*(?:\s+[A-Z]+)*)'s?\s+sfc\s+licen[sc]e",
+                
+                # Standard name patterns (both title case and uppercase)
+                r"(?:email of|contact for|about|for)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)",
+                r"([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)'s?\s+(?:email|contact|info|resume)",
+                r"(?:who is|tell me about)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)",
+                
+                # All caps names (like POON Kwok Tung)
+                r"(?:email of|contact for|about|for)\s+([A-Z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*)",
+                r"([A-Z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*)'s?\s+(?:email|contact|info|resume)",
+                r"(?:who is|tell me about)\s+([A-Z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*)",
+                
+                # Mixed case patterns for Asian names
+                r"([A-Z]+\s+[A-Z][a-z]+\s+[A-Z][a-z]+)",  # POON Kwok Tung
+                r"([A-Z][a-z]+\s+[A-Z]+)",  # Wong MARY
             ]
             
             for pattern in patterns:
-                match = re.search(pattern, query)
+                match = re.search(pattern, query, re.IGNORECASE)
                 if match:
-                    return match.group(1).strip()
+                    extracted = match.group(1).strip()
+                    # Additional validation: must contain at least one letter
+                    if any(c.isalpha() for c in extracted):
+                        return extracted
+            
+            # Final fallback: look for any sequence of 2-3 capitalized words
+            final_pattern = r"\b([A-Z]+(?:\s+[A-Z][a-z]*){1,2})\b"
+            match = re.search(final_pattern, query)
+            if match:
+                extracted = match.group(1).strip()
+                # Validate it's likely a name (not common words)
+                common_words = {'SFC', 'LICENSE', 'LICENCE', 'CHECK', 'DOES', 'HAVE', 'IS', 'THE', 'AND', 'OR'}
+                words = extracted.split()
+                if len(words) >= 2 and not any(word.upper() in common_words for word in words):
+                    return extracted
             
             return ""
     

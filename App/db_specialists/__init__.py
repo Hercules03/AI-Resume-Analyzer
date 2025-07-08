@@ -10,6 +10,7 @@ from .search_response_specialist import SearchResponseSpecialist
 from .info_response_specialist import InfoResponseSpecialist
 from .general_response_specialist import GeneralResponseSpecialist
 from .filter_matching_specialist import FilterMatchingSpecialist
+from .sfc_license_specialists import SFCLicenseCheckSpecialist, SFCWebAutomationService
 
 __all__ = [
     'BaseSpecialist',
@@ -19,5 +20,7 @@ __all__ = [
     'SearchResponseSpecialist',
     'InfoResponseSpecialist',
     'GeneralResponseSpecialist',
-    'FilterMatchingSpecialist'
+    'FilterMatchingSpecialist',
+    'SFCLicenseCheckSpecialist',
+    'SFCWebAutomationService'
 ] 

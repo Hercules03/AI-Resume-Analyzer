@@ -7,6 +7,12 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from typing_extensions import Annotated, TypedDict
+import asyncio
+import sys
+import os
+
+# Add the project root to the Python path to import the sfc_search function
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import db_manager
 from config import LLM_CONFIG, SPECIALISTS_CONFIG
@@ -16,8 +22,13 @@ from db_specialists import (
     QueryEnhancementSpecialist,
     SearchResponseSpecialist,
     InfoResponseSpecialist,
-    GeneralResponseSpecialist
+    GeneralResponseSpecialist,
+    SFCLicenseCheckSpecialist,
+    SFCWebAutomationService,
 )
+
+
+# Note: SFC search functionality is now handled by SFCWebAutomationService
 
 
 class ChatState(TypedDict):
@@ -28,6 +39,8 @@ class ChatState(TypedDict):
     search_results: List[Dict[str, Any]]
     user_intent: str
     intent_confidence: float
+    sfc_candidate_name: str
+    sfc_check_results: Dict[str, Any]
 
 
 class CandidateSearchChatbot:
@@ -37,20 +50,24 @@ class CandidateSearchChatbot:
         self.graph = None
         self.conversation_history = []
         
-        # Initialize specialists
+        # Initialize existing specialists
         self.intent_specialist = IntentSpecialist(SPECIALISTS_CONFIG['intent_analysis'])
         self.name_extraction_specialist = NameExtractionSpecialist(SPECIALISTS_CONFIG['name_extraction'])
         self.query_enhancement_specialist = QueryEnhancementSpecialist(SPECIALISTS_CONFIG['query_enhancement'])
         
-        # Initialize specialized response generators
+        # Initialize response specialists
         self.search_response_specialist = SearchResponseSpecialist(SPECIALISTS_CONFIG['search_response'])
         self.info_response_specialist = InfoResponseSpecialist(SPECIALISTS_CONFIG['info_response'])
         self.general_response_specialist = GeneralResponseSpecialist(SPECIALISTS_CONFIG['general_response'])
         
+        # Initialize SFC license checking specialists
+        self.sfc_license_check_specialist = SFCLicenseCheckSpecialist(SPECIALISTS_CONFIG['response_generation'])  # Reuse config
+        self.sfc_web_automation_service = SFCWebAutomationService()
+        
         self._build_graph()
     
     def _build_graph(self):
-        """Build the LangGraph workflow for RAG-powered conversation"""
+        """Build the LangGraph workflow for RAG-powered conversation with SFC checking"""
         
         # Define the workflow
         workflow = StateGraph(ChatState)
@@ -58,8 +75,10 @@ class CandidateSearchChatbot:
         # Add nodes
         workflow.add_node("analyze_intent", self._analyze_intent)
         workflow.add_node("search_candidates", self._search_candidates)
+        workflow.add_node("check_sfc_license", self._check_sfc_license)
         workflow.add_node("generate_search_response", self._generate_search_response)
         workflow.add_node("generate_info_response", self._generate_info_response)
+        workflow.add_node("generate_sfc_response", self._generate_sfc_response)
         workflow.add_node("generate_general_response", self._generate_general_response)
         
         # Define edges
@@ -70,6 +89,7 @@ class CandidateSearchChatbot:
             {
                 "search": "search_candidates",
                 "info": "search_candidates",  # Also search for specific info requests
+                "sfc_license": "check_sfc_license",  # Route to SFC license checking
                 "general": "generate_general_response"
             }
         )
@@ -81,8 +101,10 @@ class CandidateSearchChatbot:
                 "info": "generate_info_response"
             }
         )
+        workflow.add_edge("check_sfc_license", "generate_sfc_response")  # SFC flow
         workflow.add_edge("generate_search_response", END)
         workflow.add_edge("generate_info_response", END)
+        workflow.add_edge("generate_sfc_response", END)  # SFC end
         workflow.add_edge("generate_general_response", END)
         
         # Compile the graph
@@ -113,12 +135,115 @@ class CandidateSearchChatbot:
     def _route_based_on_intent(self, state: ChatState) -> str:
         """Route to appropriate node based on intent"""
         intent = state.get("user_intent", "general")
-        return "search" if intent in ["search", "info"] else "general"
+        
+        if intent == "sfc_license":
+            return "sfc_license"
+        elif intent in ["search", "info"]:
+            return "search"
+        else:
+            return "general"
     
     def _route_to_response_specialist(self, state: ChatState) -> str:
         """Route to appropriate response specialist after search"""
         intent = state.get("user_intent", "search")
         return intent  # Returns "search" or "info"
+    
+    def _check_sfc_license(self, state: ChatState) -> Dict[str, Any]:
+        """Check SFC license status for a candidate using SFCWebAutomationService"""
+        
+        last_message = state["messages"][-1].content if state["messages"] else ""
+        
+        try:
+            # Step 1: Extract candidate name from the user message using NameExtractionSpecialist
+            candidate_name = self.name_extraction_specialist.execute(query=last_message)
+
+            
+            if not candidate_name:
+                return {
+                    "sfc_candidate_name": "",
+                    "sfc_check_results": {
+                        "success": False,
+                        "error": "Could not extract candidate name from your message",
+                        "candidate_name": "",
+                        "search_url": "https://apps.sfc.hk/publicregWeb/searchByName"
+                    }
+                }
+            
+            # Step 2: Use SFCWebAutomationService to perform the license check
+            try:
+                check_results = self.sfc_web_automation_service.check_sfc_license(candidate_name)
+                
+                # Display SFC search results
+                if check_results.get("success", False):
+                    sfo_status = check_results.get("sfo_license", "Unknown")
+                    amlo_status = check_results.get("amlo_license", "Unknown")
+
+                    
+                    # Show raw output if available (for debugging)
+                    if check_results.get("raw_output"):
+                        with st.expander("🔧 Raw SFC Search Output (Debug)"):
+                            st.code(check_results["raw_output"], language="text")
+                else:
+                    error_msg = check_results.get("error", "Unknown error")
+                
+                return {
+                    "sfc_candidate_name": candidate_name,
+                    "sfc_check_results": check_results
+                }
+                
+            except Exception as e:
+                st.error(f"🔍 **SFC Search Exception:** {str(e)}")
+                return {
+                    "sfc_candidate_name": candidate_name,
+                    "sfc_check_results": {
+                        "success": False,
+                        "error": f"SFC license check failed: {str(e)}",
+                        "candidate_name": candidate_name,
+                        "search_url": "https://apps.sfc.hk/publicregWeb/searchByName"
+                    }
+                }
+        
+        except Exception as e:
+            st.error(f"SFC license checking failed: {e}")
+            return {
+                "sfc_candidate_name": "",
+                "sfc_check_results": {
+                    "success": False,
+                    "error": "Technical error during SFC license check",
+                    "candidate_name": "",
+                    "search_url": "https://apps.sfc.hk/publicregWeb/searchByName"
+                }
+            }
+    
+    def _generate_sfc_response(self, state: ChatState) -> Dict[str, Any]:
+        """Generate response for SFC license queries using SFCLicenseCheckSpecialist"""
+        
+        candidate_name = state.get("sfc_candidate_name", "")
+        check_results = state.get("sfc_check_results", {})
+        
+        try:
+            # Display response generation step
+            st.info("💬 **Response Generation:** Using SFCLicenseCheckSpecialist to generate user response...")
+            
+            # Step 3: Use SFCLicenseCheckSpecialist to generate the user response
+            response = self.sfc_license_check_specialist.execute(
+                check_results=check_results,
+                candidate_name=candidate_name
+            )
+            
+            
+            # Add the response to messages
+            new_messages = [AIMessage(content=response)]
+            
+            return {"messages": new_messages}
+            
+        except Exception as e:
+            st.error(f"💬 **Response Generation Failed:** {e}")
+            # Fallback response
+            error_response = self.sfc_license_check_specialist._get_fallback_output(
+                candidate_name=candidate_name
+            )
+            return {"messages": [AIMessage(content=error_response)]}
     
     def _search_candidates(self, state: ChatState) -> Dict[str, Any]:
         """Search for candidates using ChromaDB semantic search"""
@@ -376,7 +501,33 @@ Candidate {i}: {metadata.get('name', 'Unknown')}
             intent_result = self.intent_specialist.execute(message=user_message)
             user_intent = intent_result.get('intent', 'general')
             
-            # Search candidates if needed
+            # Display intent information in Streamlit
+            st.info(f"🔍 **Intent Analysis:** {user_intent} (confidence: {intent_result.get('confidence', 0):.1%})")
+            
+            # Handle SFC license intent using the proper workflow
+            if user_intent == "sfc_license":
+                # Use the LangGraph workflow for SFC license checking
+                initial_state = {
+                    "messages": [HumanMessage(content=user_message)],
+                    "context": "",
+                    "search_query": "",
+                    "search_results": [],
+                    "user_intent": "",
+                    "intent_confidence": 0.0
+                }
+                
+                final_state = self.graph.invoke(initial_state)
+                ai_messages = [msg for msg in final_state["messages"] if isinstance(msg, AIMessage)]
+                if ai_messages:
+                    complete_response = ai_messages[-1].content
+                    self.conversation_history.append({"user": user_message, "assistant": complete_response})
+                    yield complete_response
+                    return
+                else:
+                    yield "I'm sorry, I couldn't process your SFC license request properly."
+                    return
+            
+            # Search candidates if needed for other intents
             search_results = []
             context = ""
             
