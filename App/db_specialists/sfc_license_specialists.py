@@ -6,6 +6,7 @@ from .base_specialist import BaseSpecialist
 from .models import SFCLicenseQuery, SFCLicenseResult
 from pydantic import BaseModel
 import re
+from datetime import datetime
 
 class SFCLicenseCheckSpecialist(BaseSpecialist):
     """Specialist for performing SFC license verification via web automation."""
@@ -16,36 +17,32 @@ class SFCLicenseCheckSpecialist(BaseSpecialist):
     
     def get_system_prompt(self) -> str:
         """Get the system prompt for SFC license checking."""
-        return """You are an SFC license verification specialist. You help interpret the results of automated SFC license checks performed via the official SFC website.
+        return """You are an SFC license verification system. Provide clean, minimal verification results.
 
-**Your Role:**
-- Analyze search results from SFC public register
-- Determine if a person holds a valid SFC license
-- Provide clear, factual responses about license status
-- Include verification links for manual checking
+CRITICAL: Start your response immediately with the verification result. DO NOT begin with explanatory phrases.
 
-**Response Guidelines:**
-- Be factual and precise about license status
-- Always include the search URL for manual verification
-- Mention any limitations or uncertainties in the automated check
-- Provide helpful context about SFC licensing if relevant"""
+**Response Requirements:**
+- State clearly if candidate holds SFC licenses or not
+- If licenses exist, specify which ones (SFO/AMLO)
+- Include manual verification link
+- Keep response concise and direct
+- Use simple, clear formatting"""
     
     def get_user_prompt_template(self) -> str:
         """Get the user prompt template for SFC license verification."""
-        return """Based on the SFC license check results, provide a clear response about the license status for the user.
+        return """Verification Data:
+- Candidate: {candidate_name}
+- SFO License: {sfo_license}
+- AMLO License: {amlo_license}
+- Success: {success}
+- Error: {error_message}
+- Manual Check: {search_url}
 
-Candidate Name: {candidate_name}
-SFO License Status: {sfo_license}
-AMLO License Status: {amlo_license}
-Check Success: {success}
-Error Message: {error_message}
-Search URL: {search_url}
-
-Generate a user-friendly response that includes:
-1. Clear status of SFO and AMLO licenses (Active/Not Active/Unknown)
-2. Professional explanation of what each license means
+Provide a clean verification result that includes:
+1. License status (hold licenses or not)
+2. If licenses exist, specify which ones
 3. Manual verification link
-4. Appropriate formatting with emojis and clear structure"""
+Keep it simple and direct."""
     
     def prepare_input_data(self, **kwargs) -> Dict[str, Any]:
         """Prepare input data for SFC license verification response."""
@@ -56,7 +53,7 @@ Generate a user-friendly response that includes:
             'amlo_license': check_results.get('amlo_license', 'Unknown'),
             'success': check_results.get('success', False),
             'error_message': check_results.get('error', 'None'),
-            'search_url': check_results.get('search_url', 'https://apps.sfc.hk/publicregWeb/searchByName')
+            'search_url': check_results.get('search_url', 'https://apps.sfc.hk/publicregWeb/searchByName'),
         }
     
     def process_output(self, output: str, **kwargs) -> str:
@@ -76,57 +73,45 @@ Generate a user-friendly response that includes:
         amlo_license = check_results.get('amlo_license', 'Unknown')
         error_message = check_results.get('error', '')
         search_url = check_results.get('search_url', 'https://apps.sfc.hk/publicregWeb/searchByName')
+        screenshot_path = check_results.get('screenshot_path', None)
         
         if not success:
             if "No license records found" in error_message:
-                return f"""**SFC License Verification for {candidate_name}**
+                response = f"""**License Verification Results for {candidate_name}**
 
-❌ **No License Found** - No SFC license records were found for this candidate in the public register.
+**Status:** No SFC licenses found
 
-This means the candidate:
-- Does not currently hold an SFC license
-- May have never been licensed by the SFC
-- Name might not match exactly with registered records
-
-**Manual Verification:** You can double-check at: {search_url}
-
-*Note: Please ensure the name spelling is correct, as the search is case-sensitive.*"""
+**Manual Verification:** {search_url}"""
             else:
-                return f"""**SFC License Check - Technical Issue**
+                response = f"""**License Verification Results for {candidate_name}**
 
-I encountered a technical issue while checking the SFC license status for {candidate_name}.
+**Status:** Verification failed - {error_message}
 
-**Manual Verification:** Please check manually at: {search_url}
-
-1. Enter the candidate's full name
-2. Select "Individual" 
-3. Click "Search"
-
-*Error details: {error_message}*"""
-        
-        # Successful check - format the response
-        response_parts = [f"**SFC License Verification for {candidate_name}**\n"]
-        
-        if sfo_license == "Active":
-            response_parts.append("✅ **SFO License: ACTIVE** - This candidate holds a valid SFC license for dealing in securities.")
-        elif sfo_license == "Not Active":
-            response_parts.append("❌ **SFO License: NOT ACTIVE** - This candidate does not currently hold an active SFC license for dealing in securities.")
+**Manual Verification:** {search_url}"""
         else:
-            response_parts.append("❓ **SFO License: STATUS UNCLEAR** - Unable to determine SFO license status clearly.")
+            # Successful check - simple format
+            license_status = []
+            if sfo_license == "Active":
+                license_status.append("SFO License")
+            if amlo_license == "Active":
+                license_status.append("AMLO License")
+            
+            if license_status:
+                licenses_held = ", ".join(license_status)
+                response = f"""**License Verification Results for {candidate_name}**
+
+**Status:** Holds {licenses_held}
+
+**Manual Verification:** {search_url}"""
+            else:
+                response = f"""**License Verification Results for {candidate_name}**
+
+**Status:** No active SFC licenses
+
+**Manual Verification:** {search_url}"""
         
-        if amlo_license == "Active":
-            response_parts.append("✅ **AMLO License: ACTIVE** - This candidate holds a valid license under the Anti-Money Laundering and Counter-Terrorist Financing Ordinance.")
-        elif amlo_license == "Not Active":
-            response_parts.append("❌ **AMLO License: NOT ACTIVE** - This candidate does not currently hold an active AMLO license.")
-        else:
-            response_parts.append("❓ **AMLO License: STATUS UNCLEAR** - Unable to determine AMLO license status clearly.")
         
-        response_parts.extend([
-            f"\n**Manual Verification:** You can verify this information manually at: {search_url}",
-            "\n*Note: This automated check was performed using the official SFC public register. License statuses can change, so please verify manually for the most current information.*"
-        ])
-        
-        return "\n".join(response_parts)
+        return response
     
     def _get_fallback_output(self, **kwargs) -> str:
         """Get fallback output when SFC license verification fails."""
@@ -262,8 +247,15 @@ if __name__ == "__main__":
                 amlo_license = "Unknown"
                 success = True
                 error_message = None
+                screenshot_path = None
                 
-                if "NO LICENSE FOUND" in output_text:
+                # Extract screenshot path if available
+                import re
+                screenshot_match = re.search(r'SCREENSHOT_PATH:\s*(.+)', output_text)
+                if screenshot_match:
+                    screenshot_path = screenshot_match.group(1).strip()
+                
+                if "NO LICENSE FOUND" in output_text or "NO ACTIVE LICENSE FOUND" in output_text:
                     success = False
                     error_message = "No license records found in SFC register"
                 elif "LICENSE FOUND" in output_text or "SFO License Status:" in output_text:
@@ -289,7 +281,8 @@ if __name__ == "__main__":
                     'sfo_license': sfo_license,
                     'amlo_license': amlo_license,
                     'raw_output': output_text,
-                    'search_url': self.base_url
+                    'search_url': self.base_url,
+                    'screenshot_path': screenshot_path
                 }
                 
                 if error_message:

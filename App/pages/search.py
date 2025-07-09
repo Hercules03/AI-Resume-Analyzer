@@ -1007,7 +1007,32 @@ def handle_chat_search():
                     # Assistant message (only if response exists)
                     if message["assistant"] is not None:
                         with st.chat_message("assistant"):
-                            st.write(message["assistant"])
+                            # Check if message contains screenshot information
+                            assistant_content = message["assistant"]
+                            if "[SCREENSHOT_PATH:" in assistant_content:
+                                # Extract screenshot path and text content
+                                import re
+                                screenshot_match = re.search(r'\[SCREENSHOT_PATH:([^\]]+)\]', assistant_content)
+                                if screenshot_match:
+                                    screenshot_path = screenshot_match.group(1).strip()
+                                    # Remove screenshot tag from text
+                                    text_content = re.sub(r'\[SCREENSHOT_PATH:[^\]]+\]', '', assistant_content).strip()
+                                    
+                                    # Display text content
+                                    st.write(text_content)
+                                    
+                                    # Display screenshot if file exists
+                                    import os
+                                    if os.path.exists(screenshot_path):
+                                        st.image(screenshot_path, 
+                                                caption="Official SFC License Search Results", 
+                                                width=400)
+                                    else:
+                                        st.warning(f"📸 **Screenshot not found:** {screenshot_path}")
+                                else:
+                                    st.write(assistant_content)
+                            else:
+                                st.write(assistant_content)
     
     # Fixed chat input at bottom
     st.markdown("---")
@@ -1050,6 +1075,22 @@ def handle_chat_search():
                         # Use streaming chat and display with write_stream
                         response_generator = candidate_chatbot.chat_stream(last_message["user"])
                         response = st.write_stream(response_generator)
+                        
+                        # Check if response contains screenshot information
+                        if "[SCREENSHOT_PATH:" in response:
+                            import re
+                            screenshot_match = re.search(r'\[SCREENSHOT_PATH:([^\]]+)\]', response)
+                            if screenshot_match:
+                                screenshot_path = screenshot_match.group(1).strip()
+                                
+                                # Display screenshot if file exists
+                                import os
+                                if os.path.exists(screenshot_path):
+                                    st.image(screenshot_path, 
+                                            caption="Official SFC License Search Results", 
+                                            width=400)
+                                else:
+                                    st.warning(f"📸 **Screenshot not found:** {screenshot_path}")
                         
                         # Store the complete response
                         st.session_state.chat_history[-1]["assistant"] = response

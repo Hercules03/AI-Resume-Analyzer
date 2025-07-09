@@ -173,19 +173,6 @@ class CandidateSearchChatbot:
             try:
                 check_results = self.sfc_web_automation_service.check_sfc_license(candidate_name)
                 
-                # Display SFC search results
-                if check_results.get("success", False):
-                    sfo_status = check_results.get("sfo_license", "Unknown")
-                    amlo_status = check_results.get("amlo_license", "Unknown")
-
-                    
-                    # Show raw output if available (for debugging)
-                    if check_results.get("raw_output"):
-                        with st.expander("🔧 Raw SFC Search Output (Debug)"):
-                            st.code(check_results["raw_output"], language="text")
-                else:
-                    error_msg = check_results.get("error", "Unknown error")
-                
                 return {
                     "sfc_candidate_name": candidate_name,
                     "sfc_check_results": check_results
@@ -222,8 +209,6 @@ class CandidateSearchChatbot:
         check_results = state.get("sfc_check_results", {})
         
         try:
-            # Display response generation step
-            st.info("💬 **Response Generation:** Using SFCLicenseCheckSpecialist to generate user response...")
             
             # Step 3: Use SFCLicenseCheckSpecialist to generate the user response
             response = self.sfc_license_check_specialist.execute(
@@ -231,9 +216,14 @@ class CandidateSearchChatbot:
                 candidate_name=candidate_name
             )
             
-            
-            # Add the response to messages
-            new_messages = [AIMessage(content=response)]
+            # Add screenshot information to the response if available
+            screenshot_path = check_results.get('screenshot_path')
+            if screenshot_path and screenshot_path.strip():
+                # Include screenshot information in the response
+                response_with_screenshot = f"{response}\n\n[SCREENSHOT_PATH:{screenshot_path}]"
+                new_messages = [AIMessage(content=response_with_screenshot)]
+            else:
+                new_messages = [AIMessage(content=response)]
             
             return {"messages": new_messages}
             
@@ -500,9 +490,7 @@ Candidate {i}: {metadata.get('name', 'Unknown')}
             # Analyze intent first
             intent_result = self.intent_specialist.execute(message=user_message)
             user_intent = intent_result.get('intent', 'general')
-            
-            # Display intent information in Streamlit
-            st.info(f"🔍 **Intent Analysis:** {user_intent} (confidence: {intent_result.get('confidence', 0):.1%})")
+
             
             # Handle SFC license intent using the proper workflow
             if user_intent == "sfc_license":
@@ -561,7 +549,11 @@ Candidate {i}: {metadata.get('name', 'Unknown')}
             
             # Store complete conversation history after streaming
             complete_response = "".join(response_chunks)
-            self.conversation_history.append({"user": user_message, "assistant": complete_response})
+            
+            # Clean the response for conversation history (remove screenshot tags)
+            import re
+            clean_response = re.sub(r'\[SCREENSHOT_PATH:[^\]]+\]', '', complete_response).strip()
+            self.conversation_history.append({"user": user_message, "assistant": clean_response})
             
         except Exception as e:
             st.error(f"Chat streaming failed: {e}")

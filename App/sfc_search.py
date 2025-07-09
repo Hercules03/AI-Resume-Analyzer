@@ -1,6 +1,8 @@
 import asyncio
 from pyppeteer import launch
 import time
+import os
+from datetime import datetime
 
 
 async def sfc_search(candidate_name):
@@ -40,6 +42,22 @@ async def sfc_search(candidate_name):
         
         if "no name matched" in search_result_text.lower():
             print("NO LICENSE FOUND")
+            
+            # Take screenshot for verification purposes (no results found)
+            screenshots_dir = "sfc_screenshots"
+            if not os.path.exists(screenshots_dir):
+                os.makedirs(screenshots_dir)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = candidate_name.replace(" ", "_").replace(".", "")
+            screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+            screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+            
+            await page.screenshot({'path': screenshot_path, 'fullPage': True})
+            print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+            print(f"SCREENSHOT_PATH: {screenshot_path}")
+            
+            await browser.close()
             return "NO LICENSE FOUND"
         else:
             # Check if there are actual results by looking for the grid header
@@ -55,6 +73,10 @@ async def sfc_search(candidate_name):
                 sfo_cell = await page.querySelector('td.x-grid-cell-gridcolumn-1040 div.x-grid-cell-inner')
                 amlo_cell = await page.querySelector('td.x-grid-cell-gridcolumn-1041 div.x-grid-cell-inner')
                 
+                sfo_status = "No"
+                amlo_status = "No"
+                screenshot_path = None
+                
                 if sfo_cell:
                     sfo_status = await page.evaluate('(element) => element.textContent', sfo_cell)
                     sfo_status = sfo_status.strip()
@@ -66,9 +88,39 @@ async def sfc_search(candidate_name):
                         print("NO ACTIVE SFO LICENSE")
                     else:
                         print(f"UNKNOWN SFO STATUS - '{sfo_status}'")
+                        # Take screenshot for verification purposes (unknown status)
+                        screenshots_dir = "sfc_screenshots"
+                        if not os.path.exists(screenshots_dir):
+                            os.makedirs(screenshots_dir)
+                        
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        safe_name = candidate_name.replace(" ", "_").replace(".", "")
+                        screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+                        screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+                        
+                        await page.screenshot({'path': screenshot_path, 'fullPage': True})
+                        print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+                        print(f"SCREENSHOT_PATH: {screenshot_path}")
+                        
+                        await browser.close()
                         return "NO LICENSE FOUND"
                 else:
                     print("SFO LICENSE STATUS CELL NOT FOUND")
+                    # Take screenshot for verification purposes (SFO cell not found)
+                    screenshots_dir = "sfc_screenshots"
+                    if not os.path.exists(screenshots_dir):
+                        os.makedirs(screenshots_dir)
+                    
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    safe_name = candidate_name.replace(" ", "_").replace(".", "")
+                    screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+                    screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+                    
+                    await page.screenshot({'path': screenshot_path, 'fullPage': True})
+                    print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+                    print(f"SCREENSHOT_PATH: {screenshot_path}")
+                    
+                    await browser.close()
                     return "NO LICENSE FOUND"
                     
                 if amlo_cell:
@@ -82,20 +134,105 @@ async def sfc_search(candidate_name):
                         print("NO ACTIVE AMLO LICENSE")
                     else:
                         print(f"UNKNOWN AMLO STATUS - '{amlo_status}'")
+                        # Take screenshot for verification purposes (unknown AMLO status)
+                        screenshots_dir = "sfc_screenshots"
+                        if not os.path.exists(screenshots_dir):
+                            os.makedirs(screenshots_dir)
+                        
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        safe_name = candidate_name.replace(" ", "_").replace(".", "")
+                        screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+                        screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+                        
+                        await page.screenshot({'path': screenshot_path, 'fullPage': True})
+                        print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+                        print(f"SCREENSHOT_PATH: {screenshot_path}")
+                        
+                        await browser.close()
                         return "NO LICENSE FOUND"
                 else:
                     print("AMLO LICENSE STATUS CELL NOT FOUND")
+                    # Take screenshot for verification purposes (AMLO cell not found)
+                    screenshots_dir = "sfc_screenshots"
+                    if not os.path.exists(screenshots_dir):
+                        os.makedirs(screenshots_dir)
+                    
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    safe_name = candidate_name.replace(" ", "_").replace(".", "")
+                    screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+                    screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+                    
+                    await page.screenshot({'path': screenshot_path, 'fullPage': True})
+                    print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+                    print(f"SCREENSHOT_PATH: {screenshot_path}")
+                    
+                    await browser.close()
                     return "NO LICENSE FOUND"
                 
-                if amlo_cell == "Yes" and sfo_cell == "Yes":
-                    return "ACTIVE SFO AND AMLO LICENSE FOUND"
-                elif amlo_cell == "Yes" and sfo_cell == "No":
-                    return "ACTIVE AMLO LICENSE FOUND"
-                elif amlo_cell == "No" and sfo_cell == "Yes":
-                    return "ACTIVE SFO LICENSE FOUND"
+                # Always take screenshot for verification purposes (both positive and negative results)
+                # Create screenshots directory if it doesn't exist
+                screenshots_dir = "sfc_screenshots"
+                if not os.path.exists(screenshots_dir):
+                    os.makedirs(screenshots_dir)
+                
+                # Generate timestamp-based filename
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_name = candidate_name.replace(" ", "_").replace(".", "")
+                screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+                screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+                
+                # Take screenshot
+                await page.screenshot({'path': screenshot_path, 'fullPage': True})
+                print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+                
+                # Process results and return with screenshot info
+                if sfo_status == "Yes" and amlo_status == "Yes":
+                    result_msg = "ACTIVE SFO AND AMLO LICENSE FOUND"
+                elif sfo_status == "Yes" and amlo_status == "No":
+                    result_msg = "ACTIVE SFO LICENSE FOUND"
+                elif sfo_status == "No" and amlo_status == "Yes":
+                    result_msg = "ACTIVE AMLO LICENSE FOUND"
+                else:
+                    result_msg = "NO ACTIVE LICENSE FOUND"
+                
+                # Always include screenshot path for verification
+                print(f"SCREENSHOT_PATH: {screenshot_path}")
+                
+                await browser.close()
+                return result_msg
             else:
                 print("UNKNOWN - No grid found")
+                # Take screenshot for verification purposes (no grid found)
+                screenshots_dir = "sfc_screenshots"
+                if not os.path.exists(screenshots_dir):
+                    os.makedirs(screenshots_dir)
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_name = candidate_name.replace(" ", "_").replace(".", "")
+                screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+                screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+                
+                await page.screenshot({'path': screenshot_path, 'fullPage': True})
+                print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+                print(f"SCREENSHOT_PATH: {screenshot_path}")
+                
+                await browser.close()
                 return "NO LICENSE FOUND"
-    
-    
-    await browser.close()
+    else:
+        print("NO LICENSE FOUND")
+        # Take screenshot for verification purposes (general no results)
+        screenshots_dir = "sfc_screenshots"
+        if not os.path.exists(screenshots_dir):
+            os.makedirs(screenshots_dir)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = candidate_name.replace(" ", "_").replace(".", "")
+        screenshot_filename = f"sfc_license_{safe_name}_{timestamp}.png"
+        screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+        
+        await page.screenshot({'path': screenshot_path, 'fullPage': True})
+        print(f"SCREENSHOT_CAPTURED: {screenshot_path}")
+        print(f"SCREENSHOT_PATH: {screenshot_path}")
+        
+        await browser.close()
+        return "NO LICENSE FOUND"
