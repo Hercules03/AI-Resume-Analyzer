@@ -148,12 +148,10 @@ class SFCWebAutomationService:
             import io
             import subprocess
             import tempfile
+            import json
             
             # Run the sfc_search function in a separate process to avoid signal conflicts
             try:
-                import subprocess
-                import json
-                import tempfile
                 
                 # Create a subprocess script to run sfc_search
                 script_content = f'''

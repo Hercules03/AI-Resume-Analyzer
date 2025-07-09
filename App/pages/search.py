@@ -1022,7 +1022,6 @@ def handle_chat_search():
                                     st.write(text_content)
                                     
                                     # Display screenshot if file exists
-                                    import os
                                     if os.path.exists(screenshot_path):
                                         st.image(screenshot_path, 
                                                 caption="Official SFC License Search Results", 
@@ -1084,7 +1083,6 @@ def handle_chat_search():
                                 screenshot_path = screenshot_match.group(1).strip()
                                 
                                 # Display screenshot if file exists
-                                import os
                                 if os.path.exists(screenshot_path):
                                     st.image(screenshot_path, 
                                             caption="Official SFC License Search Results", 

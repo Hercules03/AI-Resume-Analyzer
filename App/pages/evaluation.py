@@ -46,12 +46,6 @@ st.markdown('''<h5 style='text-align: left; color: #021659;'> Upload Candidate R
 # Debug mode toggle
 debug_mode = False
 
-#st.checkbox(
-   #"🐛 Debug Mode - Show Raw LLM Prompts & Responses", 
-    #value=False,
-    #help="Enable this to see the exact prompts sent to the LLM and the raw responses received during resume processing"
-#)
-
 if debug_mode:
     st.info("**Debug Mode Enabled**: You will see detailed LLM interactions including prompts and raw responses for each extraction step.")
 
