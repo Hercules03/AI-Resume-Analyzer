@@ -21,12 +21,6 @@ DB_CONFIG = {
     'database': 'cv'
 }
 
-# Admin Credentials
-ADMIN_CONFIG = {
-    'username': 'admin',
-    'password': '@dmin1234'
-}
-
 # LLM Configuration - Supports both Ollama and OpenAI
 LLM_CONFIG = {
     # Default provider: 'ollama' or 'openai'
